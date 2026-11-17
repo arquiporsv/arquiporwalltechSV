@@ -25,3 +25,10 @@
     max-height: 80vh;
     overflow-y: auto;
 }
+
+.variante-row.termopanel-row { 
+    display: grid; 
+    gap: 10px; 
+    margin-bottom: 10px; 
+    grid-template-columns: 1.5fr 1fr 1fr 1fr 40px; 
+}
