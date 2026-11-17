@@ -6,7 +6,7 @@ let currentUser = null;
 let productosCache = []; 
 let categoriasCache = [];
 let productoEditandoId = null;
-let movimientosLoteTemp = []; 
+let isTermopanelMode = false;
 
 checkAuth((user) => {
     currentUser = user;
@@ -59,6 +59,45 @@ window.eliminarCategoria = async function(id) {
     }
 };
 
+// --- LÓGICA TERMOPANEL ---
+window.verificarCategoriaTermopanel = function() {
+    const cat = document.getElementById('prod-categoria').value.toLowerCase();
+    const nuevoModo = cat.includes('termopanel');
+
+    if (nuevoModo !== isTermopanelMode) {
+        isTermopanelMode = nuevoModo;
+        
+        // Guardar datos actuales de las filas antes de redibujar
+        const filasActuales = [];
+        document.querySelectorAll('.variante-row').forEach(fila => {
+            filasActuales.push({
+                medida: fila.querySelector('.var-medida').value,
+                precio: fila.querySelector('.var-precio').value,
+                stock: fila.querySelector('.var-stock') ? fila.querySelector('.var-stock').value : (fila.querySelector('.var-stock-hidden') ? fila.querySelector('.var-stock-hidden').value : ''),
+                cantPaneles: fila.querySelector('.var-cant-paneles') ? fila.querySelector('.var-cant-paneles').value : ''
+            });
+        });
+
+        document.getElementById('contenedor-variantes').innerHTML = '';
+        
+        if (filasActuales.length === 0) {
+            agregarFilaVariante();
+        } else {
+            filasActuales.forEach(f => agregarFilaVariante(f.medida, f.precio, f.stock, f.cantPaneles));
+        }
+    }
+};
+
+window.calcularMtsFila = function(input) {
+    const row = input.closest('.variante-row');
+    const medida = parseFloat(row.querySelector('.var-medida').value) || 0;
+    const cant = parseFloat(row.querySelector('.var-cant-paneles').value) || 0;
+    const mts = medida * cant;
+    
+    row.querySelector('.var-mts').value = mts.toFixed(2);
+    row.querySelector('.var-stock-hidden').value = mts; // El stock real es el total de metros
+};
+
 // --- PRODUCTOS ---
 async function cargarProductos() {
     const tbody = document.getElementById('tabla-inventario');
@@ -101,23 +140,33 @@ window.filtrarInventario = function() {
     filtrados.forEach(prod => {
         let stockTotal = 0;
         let variantesHTML = '';
+        const esTermopanel = prod.categoria.toLowerCase().includes('termopanel');
+
         prod.variantes.forEach(v => {
             stockTotal += v.stock;
             const colorStock = v.stock <= 0 ? 'stock-out' : 'stock-in';
             const stockMostrar = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
-            variantesHTML += `<span class="badge-stock">${v.medida}: $${v.precio.toFixed(2)} | <span class="${colorStock}">${stockMostrar} uds</span></span>`;
+            const unidad = esTermopanel ? 'mts' : 'uds';
+            
+            variantesHTML += `<span class="badge-stock">${v.medida}: $${v.precio.toFixed(2)} | <span class="${colorStock}">${stockMostrar} ${unidad}</span></span>`;
         });
+
+        const imgSrc = prod.fotoUrl ? prod.fotoUrl : 'https://via.placeholder.com/50?text=No';
+        const unidadTotal = esTermopanel ? 'mts' : 'uds';
 
         tbody.innerHTML += `
             <tr>
-                <td><img src="${prod.fotoUrl || 'https://via.placeholder.com/50?text=No'}" class="img-thumb"></td>
-                <td><div class="fw-bold">${prod.nombre}</div><div class="text-muted small">${prod.descripcion || ''}</div></td>
+                <td><img src="${imgSrc}" class="img-thumb" onerror="this.src='https://via.placeholder.com/50?text=Err'"></td>
+                <td>
+                    <div class="fw-bold">${prod.nombre}</div>
+                    <div class="text-muted small">${prod.descripcion || ''}</div>
+                </td>
                 <td><span class="badge bg-secondary">${prod.categoria}</span></td>
                 <td>${variantesHTML}</td>
-                <td><b>${Number.isInteger(stockTotal) ? stockTotal : stockTotal.toFixed(2)}</b></td>
+                <td><b>${Number.isInteger(stockTotal) ? stockTotal : stockTotal.toFixed(2)} ${unidadTotal}</b></td>
                 <td>
-                    <button onclick="editarProducto('${prod.id}')" class="btn btn-sm btn-outline-primary">✏️</button>
-                    <button onclick="eliminarProducto('${prod.id}')" class="btn btn-sm btn-outline-danger">🗑️</button>
+                    <button onclick="editarProducto('${prod.id}')" class="btn btn-sm btn-outline-primary" title="Editar">✏️</button>
+                    <button onclick="eliminarProducto('${prod.id}')" class="btn btn-sm btn-outline-danger" title="Eliminar">🗑️</button>
                 </td>
             </tr>
         `;
@@ -126,6 +175,7 @@ window.filtrarInventario = function() {
 
 window.abrirModalProducto = function() {
     productoEditandoId = null;
+    isTermopanelMode = false;
     document.getElementById('modal-prod-titulo').textContent = 'Nuevo Producto';
     document.getElementById('prod-nombre').value = '';
     document.getElementById('prod-categoria').value = '';
@@ -133,6 +183,7 @@ window.abrirModalProducto = function() {
     document.getElementById('prod-foto-url').value = '';
     document.getElementById('preview-foto-container').style.display = 'none';
     document.getElementById('contenedor-variantes').innerHTML = '';
+    
     agregarFilaVariante();
     new bootstrap.Modal(document.getElementById('modal-producto')).show();
 };
@@ -148,16 +199,30 @@ window.actualizarPreviewFoto = function() {
     } else { container.style.display = 'none'; }
 };
 
-window.agregarFilaVariante = function(medida = '', precio = '', stock = '') {
+window.agregarFilaVariante = function(medida = '', precio = '', stock = '', cantPaneles = '') {
     const container = document.getElementById('contenedor-variantes');
     const div = document.createElement('div');
-    div.className = 'variante-row';
-    div.innerHTML = `
-        <input type="text" class="form-control form-control-sm var-medida" placeholder="Medida" value="${medida}">
-        <input type="number" class="form-control form-control-sm var-precio" placeholder="Precio $" step="0.01" value="${precio}">
-        <input type="number" class="form-control form-control-sm var-stock" placeholder="Stock" step="0.01" value="${stock}">
-        <button class="btn-remove-row" onclick="this.parentElement.remove()">X</button>
-    `;
+    
+    if (isTermopanelMode) {
+        div.className = 'variante-row termopanel-row';
+        div.innerHTML = `
+            <input type="text" class="form-control form-control-sm var-medida" placeholder="Medida (mts)" value="${medida}" oninput="calcularMtsFila(this)">
+            <input type="number" class="form-control form-control-sm var-precio" placeholder="Precio $" step="0.01" value="${precio}">
+            <input type="number" class="form-control form-control-sm var-cant-paneles" placeholder="Cant. Paneles" value="${cantPaneles}" oninput="calcularMtsFila(this)">
+            <input type="text" class="form-control form-control-sm var-mts" placeholder="Total Mts" value="${stock}" readonly style="background-color: #e9ecef;">
+            <input type="hidden" class="var-stock-hidden" value="${stock}">
+            <button class="btn-remove-row" onclick="this.parentElement.remove()">X</button>
+        `;
+    } else {
+        div.className = 'variante-row';
+        div.innerHTML = `
+            <input type="text" class="form-control form-control-sm var-medida" placeholder="Medida" value="${medida}">
+            <input type="number" class="form-control form-control-sm var-precio" placeholder="Precio $" step="0.01" value="${precio}">
+            <input type="number" class="form-control form-control-sm var-stock" placeholder="Stock" step="0.01" value="${stock}">
+            <button class="btn-remove-row" onclick="this.parentElement.remove()">X</button>
+        `;
+    }
+    
     container.appendChild(div);
 };
 
@@ -169,17 +234,39 @@ window.guardarProducto = async function() {
     
     if (!nombre || !categoria) return showAlert('Aviso', 'Nombre y Categoría son obligatorios.', 'warning');
 
+    const esTermopanel = categoria.toLowerCase().includes('termopanel');
     const variantes = [];
+    
     document.querySelectorAll('.variante-row').forEach(fila => {
         const medida = fila.querySelector('.var-medida').value.trim();
         const precio = parseFloat(fila.querySelector('.var-precio').value);
-        const stock = parseFloat(fila.querySelector('.var-stock').value) || 0;
-        if (medida && !isNaN(precio)) variantes.push({ medida, precio, stock });
+        
+        let stock = 0;
+        let cantPaneles = null;
+
+        if (esTermopanel) {
+            stock = parseFloat(fila.querySelector('.var-stock-hidden').value) || 0;
+            cantPaneles = parseFloat(fila.querySelector('.var-cant-paneles').value) || 0;
+        } else {
+            stock = parseFloat(fila.querySelector('.var-stock').value) || 0;
+        }
+        
+        if (medida && !isNaN(precio)) {
+            variantes.push({ medida, precio, stock, cantPaneles });
+        }
     });
 
-    if (variantes.length === 0) return showAlert('Aviso', 'Agrega al menos una variante.', 'warning');
+    if (variantes.length === 0) return showAlert('Aviso', 'Agrega al menos una variante válida.', 'warning');
 
-    const payload = { userId: currentUser.uid, nombre, categoria, descripcion, fotoUrl, variantes, fechaActualizacion: new Date().toISOString() };
+    const payload = { 
+        userId: currentUser.uid, 
+        nombre, 
+        categoria, 
+        descripcion, 
+        fotoUrl, 
+        variantes, 
+        fechaActualizacion: new Date().toISOString() 
+    };
 
     try {
         if (productoEditandoId) {
@@ -198,29 +285,34 @@ window.guardarProducto = async function() {
 window.editarProducto = function(id) {
     const prod = productosCache.find(p => p.id === id);
     if (!prod) return;
+    
     productoEditandoId = id;
+    isTermopanelMode = prod.categoria.toLowerCase().includes('termopanel');
+    
     document.getElementById('modal-prod-titulo').textContent = 'Editar Producto';
     document.getElementById('prod-nombre').value = prod.nombre;
     document.getElementById('prod-categoria').value = prod.categoria;
     document.getElementById('prod-descripcion').value = prod.descripcion || '';
     document.getElementById('prod-foto-url').value = prod.fotoUrl || '';
+    
     actualizarPreviewFoto();
+
     document.getElementById('contenedor-variantes').innerHTML = '';
-    prod.variantes.forEach(v => agregarFilaVariante(v.medida, v.precio, v.stock));
+    prod.variantes.forEach(v => agregarFilaVariante(v.medida, v.precio, v.stock, v.cantPaneles));
+
     new bootstrap.Modal(document.getElementById('modal-producto')).show();
 };
 
 window.eliminarProducto = async function(id) {
-    if (await showConfirm('¿Estás seguro de eliminar este producto?')) {
+    if (await showConfirm('¿Estás seguro de eliminar este producto del inventario?')) {
         await deleteDoc(doc(db, "inventario", id));
         await cargarProductos();
         showAlert('Eliminado', 'El producto ha sido borrado.', 'success');
     }
 };
 
-// --- MOVIMIENTOS DE STOCK (Lote) ---
+// --- MOVIMIENTOS RÁPIDOS (Lote) ---
 window.abrirModalMovimiento = function() {
-    movimientosLoteTemp = [];
     document.getElementById('tabla-lote-movimiento').querySelector('tbody').innerHTML = '';
     document.getElementById('mov-codigo-gen').value = '';
     document.getElementById('mov-num-dte').value = '';
@@ -243,90 +335,42 @@ window.cargarVariantesMovimiento = function() {
         return;
     }
     const prod = productosCache.find(p => p.id === prodId);
+    const esTermopanel = prod.categoria.toLowerCase().includes('termopanel');
+    
     prod.variantes.forEach((v, index) => {
         const stockMostrar = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
-        selectVar.innerHTML += `<option value="${index}">${v.medida} (Stock: ${stockMostrar})</option>`;
+        const unidad = esTermopanel ? 'mts' : 'uds';
+        selectVar.innerHTML += `<option value="${index}">${v.medida} (Stock: ${stockMostrar} ${unidad})</option>`;
     });
 };
 
-window.agregarItemAlLote = function() {
+window.registrarLoteMovimiento = async function() {
     const prodId = document.getElementById('mov-producto').value;
     const varIndex = document.getElementById('mov-variante').value;
     const tipo = document.getElementById('mov-tipo').value;
     const cantidad = parseFloat(document.getElementById('mov-cantidad').value);
+    const codGen = document.getElementById('mov-codigo-gen').value.trim();
+    const numDte = document.getElementById('mov-num-dte').value.trim();
 
     if (!prodId || varIndex === "" || isNaN(cantidad) || cantidad <= 0) {
-        return showAlert('Aviso', 'Seleccione producto, variante y cantidad válida.', 'warning');
+        return showAlert('Aviso', 'Complete producto, variante y cantidad válida.', 'warning');
     }
 
     const prod = productosCache.find(p => p.id === prodId);
-    const variante = prod.variantes[varIndex];
+    let stockActual = prod.variantes[varIndex].stock;
 
-    if (tipo === 'salida') {
-        const yaEnLote = movimientosLoteTemp.filter(m => m.prodId === prodId && m.varIndex === varIndex && m.tipo === 'salida').reduce((sum, m) => sum + m.cantidad, 0);
-        if ((cantidad + yaEnLote) > variante.stock) {
-            return showAlert('Aviso', `Stock insuficiente de ${prod.nombre} (${variante.medida}). Disponible: ${variante.stock}`, 'warning');
-        }
-    }
+    if (tipo === 'salida' && cantidad > stockActual) return showAlert('Aviso', 'Stock insuficiente.', 'warning');
 
-    movimientosLoteTemp.push({ prodId, varIndex, tipo, cantidad, nombre: prod.nombre, medida: variante.medida, stockActual: variante.stock });
-    renderizarLoteTabla();
+    prod.variantes[varIndex].stock += (tipo === 'entrada' ? cantidad : -cantidad);
     
-    document.getElementById('mov-producto').value = '';
-    document.getElementById('mov-variante').innerHTML = '<option value="">-- Seleccione producto --</option>';
-    document.getElementById('mov-cantidad').value = '1';
-};
-
-function renderizarLoteTabla() {
-    const tbody = document.getElementById('tabla-lote-movimiento').querySelector('tbody');
-    tbody.innerHTML = '';
-    movimientosLoteTemp.forEach((item, index) => {
-        const cantMostrar = Number.isInteger(item.cantidad) ? item.cantidad : item.cantidad.toFixed(2);
-        tbody.innerHTML += `
-            <tr>
-                <td>${item.nombre}</td>
-                <td>${item.medida}</td>
-                <td><span class="badge ${item.tipo === 'entrada' ? 'bg-success' : 'bg-danger'}">${item.tipo}</span></td>
-                <td>${cantMostrar}</td>
-                <td><button class="btn btn-sm btn-outline-danger" onclick="eliminarItemLote(${index})">X</button></td>
-            </tr>
-        `;
-    });
-}
-
-window.eliminarItemLote = function(index) {
-    movimientosLoteTemp.splice(index, 1);
-    renderizarLoteTabla();
-};
-
-window.registrarLoteMovimiento = async function() {
-    if (movimientosLoteTemp.length === 0) return showAlert('Aviso', 'No has agregado ningún producto.', 'warning');
-
-    const codGen = document.getElementById('mov-codigo-gen').value.trim();
-    const numDte = document.getElementById('mov-num-dte').value.trim();
-    const loteId = 'LOTE-' + Date.now(); 
-
     try {
-        for (const item of movimientosLoteTemp) {
-            const prod = productosCache.find(p => p.id === item.prodId);
-            prod.variantes[item.varIndex].stock += (item.tipo === 'entrada' ? item.cantidad : -item.cantidad);
-            
-            await updateDoc(doc(db, "inventario", item.prodId), { variantes: prod.variantes });
-            await addDoc(collection(db, "movimientos_inventario"), {
-                userId: currentUser.uid, 
-                productoId: item.prodId, 
-                productoNombre: item.nombre,
-                medida: item.medida, 
-                tipo: item.tipo, 
-                cantidad: item.cantidad,
-                comentario: '', 
-                codigoGeneracion: codGen,
-                numeroDTE: numDte,
-                loteId: loteId, 
-                fecha: new Date().toISOString()
-            });
-        }
-        showAlert('Éxito', 'Lote registrado exitosamente.', 'success');
+        await updateDoc(doc(db, "inventario", prodId), { variantes: prod.variantes });
+        await addDoc(collection(db, "movimientos_inventario"), {
+            userId: currentUser.uid, productoId: prodId, productoNombre: prod.nombre,
+            medida: prod.variantes[varIndex].medida, tipo, cantidad,
+            comentario: '', codigoGeneracion: codGen, numeroDTE: numDte, fecha: new Date().toISOString()
+        });
+        showAlert('Éxito', 'Movimiento registrado.', 'success');
         bootstrap.Modal.getInstance(document.getElementById('modal-movimiento')).hide();
         await cargarProductos();
     } catch (e) { showAlert('Error', e.message, 'danger'); }
