@@ -3,13 +3,18 @@ import { collection, getDocs, query, where } from "https://www.gstatic.com/fireb
 
 let publicProductosCache = [];
 
-// Obtenemos el UID de la URL
+// Leer los parámetros de la URL
 const urlParams = new URLSearchParams(window.location.search);
 const publicUid = urlParams.get('uid');
+const modoBasico = urlParams.get('modo') === 'basico';
 
 if (!publicUid) {
     document.getElementById('public-inventario-grid').innerHTML = '<div class="col-12 text-center text-danger"><h4>Enlace inválido o falta el ID del catálogo.</h4></div>';
 } else {
+    // Si es modo básico, podemos cambiar el título de la página
+    if (modoBasico) {
+        document.querySelector('.public-header h1').textContent = 'Catálogo de Productos';
+    }
     cargarInventarioPublico(publicUid);
 }
 
@@ -25,6 +30,7 @@ async function cargarInventarioPublico(uid) {
 
     const categoriasUnicas = [...new Set(publicProductosCache.map(p => p.categoria))].filter(Boolean);
     const filtroSelect = document.getElementById('public-filtro-categoria');
+    filtroSelect.innerHTML = '<option value="">Todas las categorías</option>';
     categoriasUnicas.forEach(cat => { filtroSelect.innerHTML += `<option value="${cat}">${cat}</option>`; });
 
     renderizarCatalogoPublico();
@@ -51,13 +57,31 @@ window.renderizarCatalogoPublico = function() {
     }
 
     productosFiltrados.forEach(prod => {
+        // DETECTAR SI ES TERMOPANEL (Robusto a mayúsculas/minúsculas)
+        const esTermopanel = prod.categoria.toUpperCase().includes('TERMOPANEL');
+        
         let variantesHTML = '';
         prod.variantes.forEach(v => {
-            const stockText = v.stock > 0 ? `<span class="text-success fw-bold small">Stock: ${v.stock}</span>` : `<span class="text-danger fw-bold small">Agotado</span>`;
+            let stockHTML = '';
+            
+            // Si NO es modo básico, mostramos el stock adaptado
+            if (!modoBasico) {
+                const unidad = esTermopanel ? 'mts' : 'uds';
+                const colorClass = v.stock <= 0 ? 'text-danger' : 'text-success';
+                const texto = v.stock > 0 ? `Stock: ${Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2)} ${unidad}` : 'Agotado';
+                stockHTML = `<span class="small fw-bold ${colorClass}">${texto}</span>`;
+            }
+
+            // Si NO es modo básico, mostramos el precio
+            let precioHTML = '';
+            if (!modoBasico) {
+                precioHTML = `<span class="text-muted">$${v.precio.toFixed(2)}</span>`;
+            }
+
             variantesHTML += `<li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
-                <span class="fw-semibold">${v.medida}</span> 
-                <span class="text-muted">$${v.precio.toFixed(2)}</span>
-                ${stockText}
+                <span class="fw-semibold">${v.medida} ${esTermopanel ? '(mts)' : ''}</span> 
+                ${precioHTML}
+                ${stockHTML}
             </li>`;
         });
 
