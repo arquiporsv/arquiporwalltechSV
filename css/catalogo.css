@@ -11,23 +11,30 @@
 .public-card { transition: transform 0.2s; }
 .public-card:hover { transform: translateY(-5px); }
 
-/* Estilos para las etiquetas dentro de la tarjeta */
+/* Estilos para la tabla de variantes dentro de la tarjeta */
+.table-variantes {
+    width: 100%;
+    margin-bottom: 0;
+    font-size: 13px;
+}
+.table-variantes th {
+    background-color: #f8f9fa;
+    color: #555;
+    font-weight: 600;
+    text-align: center;
+    padding: 8px 5px;
+    border-bottom: 2px solid #dee2e6;
+}
+.table-variantes td {
+    text-align: center;
+    vertical-align: middle;
+    padding: 8px 5px;
+}
+
 .label-text {
     font-weight: bold;
     color: #555;
     font-size: 12px;
     text-transform: uppercase;
     margin-right: 5px;
-}
-.variant-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 10px 15px;
-}
-.variant-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 14px;
 }
