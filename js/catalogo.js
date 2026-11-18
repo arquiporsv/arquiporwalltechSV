@@ -2,22 +2,50 @@ import { db } from './firebase.js';
 import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 let publicProductosCache = [];
+let usuarioObjetivoUid = null;
+let modoBasico = false;
 
-// Leer los parámetros de la URL
+// ==========================================
+// LÓGICA DE URL LIMPIA (history.replaceState)
+// ==========================================
 const urlParams = new URLSearchParams(window.location.search);
-const publicUid = urlParams.get('uid');
-const modoBasico = urlParams.get('modo') === 'basico';
+let paramUid = urlParams.get('uid') || urlParams.get('tienda'); // Acepta ambos por si acaso
+let paramModo = urlParams.get('modo');
 
-if (!publicUid) {
-    document.getElementById('public-inventario-grid').innerHTML = '<div class="col-12 text-center text-danger"><h4>Enlace inválido o falta el ID del catálogo.</h4></div>';
+if (paramUid) {
+    // 1. Guardar en la memoria del navegador para que al recargar no se pierda
+    localStorage.setItem('catalogo_uid', paramUid);
+    localStorage.setItem('catalogo_modo', paramModo || 'normal');
+    
+    // 2. Limpiar la barra de direcciones (el usuario solo verá .../catalogo.html)
+    window.history.replaceState({}, document.title, window.location.pathname);
 } else {
-    // Si es modo básico, cambiamos el título de la cabecera
-    if (modoBasico) {
-        document.getElementById('titulo-catalogo').textContent = 'Catálogo de Productos (Sin Precios)';
-    }
-    cargarInventarioPublico(publicUid);
+    // 3. Si no hay parámetros en la URL, buscar en la memoria
+    paramUid = localStorage.getItem('catalogo_uid');
+    paramModo = localStorage.getItem('catalogo_modo');
 }
 
+usuarioObjetivoUid = paramUid;
+modoBasico = (paramModo === 'basico');
+
+// ==========================================
+// INICIALIZACIÓN
+// ==========================================
+if (!usuarioObjetivoUid) {
+    document.getElementById('public-inventario-grid').innerHTML = '<div class="col-12 text-center text-danger"><h4>Enlace inválido o expirado.</h4></div>';
+} else {
+    // CAMBIO DE TÍTULO SEGÚN EL MODO
+    if (modoBasico) {
+        document.getElementById('titulo-catalogo').textContent = 'CATALOGO ARQUIPOR / WALLTECH';
+    } else {
+        document.getElementById('titulo-catalogo').textContent = 'Catálogo de Productos';
+    }
+    cargarInventarioPublico(usuarioObjetivoUid);
+}
+
+// ==========================================
+// CARGA Y RENDERIZADO
+// ==========================================
 async function cargarInventarioPublico(uid) {
     const grid = document.getElementById('public-inventario-grid');
     grid.innerHTML = '<div class="col-12 text-center"><div class="spinner-border text-primary"></div></div>';
@@ -59,73 +87,35 @@ window.renderizarCatalogoPublico = function() {
     productosFiltrados.forEach(prod => {
         const esTermopanel = prod.categoria.toUpperCase().includes('TERMOPANEL');
         
-        // Construcción de la tabla de variantes
         let tableHeaders = '';
         let tableRows = '';
 
         if (!modoBasico) {
             // MODO NORMAL (Con precios y stock)
             if (esTermopanel) {
-                tableHeaders = `
-                    <tr>
-                        <th>Medida (mts)</th>
-                        <th>Cant. Paneles</th>
-                        <th>Precio</th>
-                        <th>Total Mts</th>
-                    </tr>`;
+                tableHeaders = `<tr><th>Medida (mts)</th><th>Cant. Paneles</th><th>Precio</th><th>Total Mts</th></tr>`;
                 prod.variantes.forEach(v => {
-                    const cantPaneles = v.cantPaneles || 0;
                     const totalMts = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
-                    tableRows += `
-                        <tr>
-                            <td>${v.medida}</td>
-                            <td>${cantPaneles}</td>
-                            <td>$${v.precio.toFixed(2)}</td>
-                            <td>${totalMts}</td>
-                        </tr>`;
+                    tableRows += `<tr><td>${v.medida}</td><td>${v.cantPaneles || 0}</td><td>$${v.precio.toFixed(2)}</td><td>${totalMts}</td></tr>`;
                 });
             } else {
-                tableHeaders = `
-                    <tr>
-                        <th>Medida</th>
-                        <th>Precio</th>
-                        <th>Stock</th>
-                    </tr>`;
+                tableHeaders = `<tr><th>Medida</th><th>Precio</th><th>Stock</th></tr>`;
                 prod.variantes.forEach(v => {
                     const stockMostrar = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
-                    tableRows += `
-                        <tr>
-                            <td>${v.medida}</td>
-                            <td>$${v.precio.toFixed(2)}</td>
-                            <td>${stockMostrar} uds</td>
-                        </tr>`;
+                    tableRows += `<tr><td>${v.medida}</td><td>$${v.precio.toFixed(2)}</td><td>${stockMostrar} uds</td></tr>`;
                 });
             }
         } else {
             // MODO BÁSICO (Sin precios ni stock)
             if (esTermopanel) {
-                tableHeaders = `
-                    <tr>
-                        <th>Medida (mts)</th>
-                        <th>Cant. Paneles</th>
-                    </tr>`;
+                tableHeaders = `<tr><th>Medida (mts)</th><th>Cant. Paneles</th></tr>`;
                 prod.variantes.forEach(v => {
-                    tableRows += `
-                        <tr>
-                            <td>${v.medida}</td>
-                            <td>${v.cantPaneles || 0}</td>
-                        </tr>`;
+                    tableRows += `<tr><td>${v.medida}</td><td>${v.cantPaneles || 0}</td></tr>`;
                 });
             } else {
-                tableHeaders = `
-                    <tr>
-                        <th>Medida</th>
-                    </tr>`;
+                tableHeaders = `<tr><th>Medida</th></tr>`;
                 prod.variantes.forEach(v => {
-                    tableRows += `
-                        <tr>
-                            <td>${v.medida}</td>
-                        </tr>`;
+                    tableRows += `<tr><td>${v.medida}</td></tr>`;
                 });
             }
         }
