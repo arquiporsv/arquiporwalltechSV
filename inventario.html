@@ -16,13 +16,17 @@
         <!-- CONTENIDO PRINCIPAL -->
         <main class="main-content">
             <header class="view-header">
-                <h2>Gestión de Inventario</h2>
-                <div class="action-buttons">
-                    <button onclick="copiarEnlacePublico()" class="btn btn-success">🔗 Compartir Catálogo</button>
-                    <button onclick="abrirModalMovimiento()" class="btn btn-warning text-white">🔄 Movimiento Rápido</button>
-                    <button onclick="abrirModalProducto()" class="btn btn-primary">+ Nuevo Producto</button>
-                </div>
-            </header>
+    <h2>Gestión de Inventario</h2>
+    <div class="action-buttons">
+        <!-- Botón existente -->
+        <button onclick="copiarEnlacePublico()" class="btn btn-success">🔗 Compartir Catálogo</button>
+        <!-- NUEVO BOTÓN -->
+        <button onclick="copiarEnlacePublicoBasico()" class="btn btn-outline-success">📄 Catálogo Sin Precios</button>
+        
+        <button onclick="abrirModalMovimiento()" class="btn btn-warning text-white">🔄 Movimiento Rápido</button>
+        <button onclick="abrirModalProducto()" class="btn btn-primary">+ Nuevo Producto</button>
+    </div>
+</header>
 
             <!-- BARRA DE BÚSQUEDA Y FILTROS -->
             <div class="card p-3 shadow-sm mb-3">
