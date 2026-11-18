@@ -383,3 +383,13 @@ window.copiarEnlacePublico = function() {
         showAlert('Éxito', 'Enlace copiado.', 'success');
     });
 };
+
+window.copiarEnlacePublicoBasico = function() {
+    const baseUrl = window.location.origin + window.location.pathname.replace('inventario.html', '');
+    // Agregamos el parámetro ?modo=basico
+    const publicUrl = `${baseUrl}catalogo.html?uid=${currentUser.uid}&modo=basico`;
+    
+    navigator.clipboard.writeText(publicUrl).then(() => {
+        showAlert('Éxito', 'Enlace del catálogo básico (sin precios) copiado.', 'success');
+    });
+};
