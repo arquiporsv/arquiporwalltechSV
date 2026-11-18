@@ -1,56 +1,31 @@
 import { db } from './firebase.js';
 import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+// ==========================================
+// CONFIGURACIÓN FIJA DE LA TIENDA
+// ==========================================
+const USER_ID = "qzrkTfw212gfpbePrIpyiF2AZhK2"; // <-- Tu UID de Firebase
 let publicProductosCache = [];
-let usuarioObjetivoUid = null;
-let modoBasico = false;
 
-// ==========================================
-// LÓGICA DE URL LIMPIA (history.replaceState)
-// ==========================================
-const urlParams = new URLSearchParams(window.location.search);
-let paramUid = urlParams.get('uid') || urlParams.get('tienda'); // Acepta ambos por si acaso
-let paramModo = urlParams.get('modo');
+// Detectar automáticamente si estamos en catalogo.html (básico) o stock.html (completo)
+const esModoBasico = window.location.pathname.includes('catalogo.html');
 
-if (paramUid) {
-    // 1. Guardar en la memoria del navegador para que al recargar no se pierda
-    localStorage.setItem('catalogo_uid', paramUid);
-    localStorage.setItem('catalogo_modo', paramModo || 'normal');
-    
-    // 2. Limpiar la barra de direcciones (el usuario solo verá .../catalogo.html)
-    window.history.replaceState({}, document.title, window.location.pathname);
+if (esModoBasico) {
+    document.getElementById('titulo-catalogo').textContent = 'CATALOGO ARQUIPOR / WALLTECH';
 } else {
-    // 3. Si no hay parámetros en la URL, buscar en la memoria
-    paramUid = localStorage.getItem('catalogo_uid');
-    paramModo = localStorage.getItem('catalogo_modo');
+    document.getElementById('titulo-catalogo').textContent = 'Catálogo Completo';
 }
 
-usuarioObjetivoUid = paramUid;
-modoBasico = (paramModo === 'basico');
-
-// ==========================================
-// INICIALIZACIÓN
-// ==========================================
-if (!usuarioObjetivoUid) {
-    document.getElementById('public-inventario-grid').innerHTML = '<div class="col-12 text-center text-danger"><h4>Enlace inválido o expirado.</h4></div>';
-} else {
-    // CAMBIO DE TÍTULO SEGÚN EL MODO
-    if (modoBasico) {
-        document.getElementById('titulo-catalogo').textContent = 'CATALOGO ARQUIPOR / WALLTECH';
-    } else {
-        document.getElementById('titulo-catalogo').textContent = 'Catálogo de Productos';
-    }
-    cargarInventarioPublico(usuarioObjetivoUid);
-}
+cargarInventarioPublico();
 
 // ==========================================
 // CARGA Y RENDERIZADO
 // ==========================================
-async function cargarInventarioPublico(uid) {
+async function cargarInventarioPublico() {
     const grid = document.getElementById('public-inventario-grid');
     grid.innerHTML = '<div class="col-12 text-center"><div class="spinner-border text-primary"></div></div>';
 
-    const q = query(collection(db, "inventario"), where("userId", "==", uid));
+    const q = query(collection(db, "inventario"), where("userId", "==", USER_ID));
     const snapshot = await getDocs(q);
     
     publicProductosCache = snapshot.docs.map(doc => doc.data());
@@ -90,8 +65,8 @@ window.renderizarCatalogoPublico = function() {
         let tableHeaders = '';
         let tableRows = '';
 
-        if (!modoBasico) {
-            // MODO NORMAL (Con precios y stock)
+        if (!esModoBasico) {
+            // MODO COMPLETO (stock.html)
             if (esTermopanel) {
                 tableHeaders = `<tr><th>Medida (mts)</th><th>Cant. Paneles</th><th>Precio</th><th>Total Mts</th></tr>`;
                 prod.variantes.forEach(v => {
@@ -106,7 +81,7 @@ window.renderizarCatalogoPublico = function() {
                 });
             }
         } else {
-            // MODO BÁSICO (Sin precios ni stock)
+            // MODO BÁSICO (catalogo.html)
             if (esTermopanel) {
                 tableHeaders = `<tr><th>Medida (mts)</th><th>Cant. Paneles</th></tr>`;
                 prod.variantes.forEach(v => {
