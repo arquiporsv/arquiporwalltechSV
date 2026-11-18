@@ -58,33 +58,77 @@ window.renderizarCatalogoPublico = function() {
 
     productosFiltrados.forEach(prod => {
         const esTermopanel = prod.categoria.toUpperCase().includes('TERMOPANEL');
-        let variantesHTML = '';
+        
+        // Construcción de la tabla de variantes
+        let tableHeaders = '';
+        let tableRows = '';
 
-        prod.variantes.forEach(v => {
-            let stockHTML = '';
-            let precioHTML = '';
-
-            // Si NO es modo básico, preparamos precio y stock
-            if (!modoBasico) {
-                const unidad = esTermopanel ? 'mts' : 'uds';
-                const colorClass = v.stock <= 0 ? 'text-danger' : 'text-success';
-                const stockMostrar = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
-                
-                precioHTML = `<div class="variant-row"><span class="label-text">Precio:</span> <span class="text-muted">$${v.precio.toFixed(2)}</span></div>`;
-                stockHTML = `<div class="variant-row"><span class="label-text">Cantidad:</span> <span class="${colorClass}">${stockMostrar} ${unidad}</span></div>`;
+        if (!modoBasico) {
+            // MODO NORMAL (Con precios y stock)
+            if (esTermopanel) {
+                tableHeaders = `
+                    <tr>
+                        <th>Medida (mts)</th>
+                        <th>Cant. Paneles</th>
+                        <th>Precio</th>
+                        <th>Total Mts</th>
+                    </tr>`;
+                prod.variantes.forEach(v => {
+                    const cantPaneles = v.cantPaneles || 0;
+                    const totalMts = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
+                    tableRows += `
+                        <tr>
+                            <td>${v.medida}</td>
+                            <td>${cantPaneles}</td>
+                            <td>$${v.precio.toFixed(2)}</td>
+                            <td>${totalMts}</td>
+                        </tr>`;
+                });
+            } else {
+                tableHeaders = `
+                    <tr>
+                        <th>Medida</th>
+                        <th>Precio</th>
+                        <th>Stock</th>
+                    </tr>`;
+                prod.variantes.forEach(v => {
+                    const stockMostrar = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
+                    tableRows += `
+                        <tr>
+                            <td>${v.medida}</td>
+                            <td>$${v.precio.toFixed(2)}</td>
+                            <td>${stockMostrar} uds</td>
+                        </tr>`;
+                });
             }
-
-            variantesHTML += `
-                <li class="list-group-item variant-item">
-                    <div class="variant-row">
-                        <span class="label-text">Medida:</span> 
-                        <span class="fw-bold">${v.medida} ${esTermopanel ? 'mts' : ''}</span>
-                    </div>
-                    ${precioHTML}
-                    ${stockHTML}
-                </li>
-            `;
-        });
+        } else {
+            // MODO BÁSICO (Sin precios ni stock)
+            if (esTermopanel) {
+                tableHeaders = `
+                    <tr>
+                        <th>Medida (mts)</th>
+                        <th>Cant. Paneles</th>
+                    </tr>`;
+                prod.variantes.forEach(v => {
+                    tableRows += `
+                        <tr>
+                            <td>${v.medida}</td>
+                            <td>${v.cantPaneles || 0}</td>
+                        </tr>`;
+                });
+            } else {
+                tableHeaders = `
+                    <tr>
+                        <th>Medida</th>
+                    </tr>`;
+                prod.variantes.forEach(v => {
+                    tableRows += `
+                        <tr>
+                            <td>${v.medida}</td>
+                        </tr>`;
+                });
+            }
+        }
 
         const imgSrc = prod.fotoUrl ? prod.fotoUrl : 'https://via.placeholder.com/300x250?text=Sin+Foto';
         const descHTML = prod.descripcion ? `<div class="mt-2"><span class="label-text">Descripción:</span><br><span class="text-muted small">${prod.descripcion}</span></div>` : '';
@@ -104,9 +148,12 @@ window.renderizarCatalogoPublico = function() {
                         </div>
                         ${descHTML}
                     </div>
-                    <ul class="list-group list-group-flush mt-auto">
-                        ${variantesHTML}
-                    </ul>
+                    <div class="table-responsive mt-auto border-top">
+                        <table class="table table-variantes table-bordered mb-0">
+                            <thead>${tableHeaders}</thead>
+                            <tbody>${tableRows}</tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         `;
