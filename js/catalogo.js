@@ -11,9 +11,9 @@ const modoBasico = urlParams.get('modo') === 'basico';
 if (!publicUid) {
     document.getElementById('public-inventario-grid').innerHTML = '<div class="col-12 text-center text-danger"><h4>Enlace inválido o falta el ID del catálogo.</h4></div>';
 } else {
-    // Si es modo básico, podemos cambiar el título de la página
+    // Si es modo básico, cambiamos el título de la cabecera
     if (modoBasico) {
-        document.querySelector('.public-header h1').textContent = 'Catálogo de Productos';
+        document.getElementById('titulo-catalogo').textContent = 'Catálogo de Productos (Sin Precios)';
     }
     cargarInventarioPublico(publicUid);
 }
@@ -57,47 +57,56 @@ window.renderizarCatalogoPublico = function() {
     }
 
     productosFiltrados.forEach(prod => {
-        // DETECTAR SI ES TERMOPANEL (Robusto a mayúsculas/minúsculas)
         const esTermopanel = prod.categoria.toUpperCase().includes('TERMOPANEL');
-        
         let variantesHTML = '';
+
         prod.variantes.forEach(v => {
             let stockHTML = '';
-            
-            // Si NO es modo básico, mostramos el stock adaptado
+            let precioHTML = '';
+
+            // Si NO es modo básico, preparamos precio y stock
             if (!modoBasico) {
                 const unidad = esTermopanel ? 'mts' : 'uds';
                 const colorClass = v.stock <= 0 ? 'text-danger' : 'text-success';
-                const texto = v.stock > 0 ? `Stock: ${Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2)} ${unidad}` : 'Agotado';
-                stockHTML = `<span class="small fw-bold ${colorClass}">${texto}</span>`;
+                const stockMostrar = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
+                
+                precioHTML = `<div class="variant-row"><span class="label-text">Precio:</span> <span class="text-muted">$${v.precio.toFixed(2)}</span></div>`;
+                stockHTML = `<div class="variant-row"><span class="label-text">Cantidad:</span> <span class="${colorClass}">${stockMostrar} ${unidad}</span></div>`;
             }
 
-            // Si NO es modo básico, mostramos el precio
-            let precioHTML = '';
-            if (!modoBasico) {
-                precioHTML = `<span class="text-muted">$${v.precio.toFixed(2)}</span>`;
-            }
-
-            variantesHTML += `<li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
-                <span class="fw-semibold">${v.medida} ${esTermopanel ? '(mts)' : ''}</span> 
-                ${precioHTML}
-                ${stockHTML}
-            </li>`;
+            variantesHTML += `
+                <li class="list-group-item variant-item">
+                    <div class="variant-row">
+                        <span class="label-text">Medida:</span> 
+                        <span class="fw-bold">${v.medida} ${esTermopanel ? 'mts' : ''}</span>
+                    </div>
+                    ${precioHTML}
+                    ${stockHTML}
+                </li>
+            `;
         });
 
         const imgSrc = prod.fotoUrl ? prod.fotoUrl : 'https://via.placeholder.com/300x250?text=Sin+Foto';
-        const desc = prod.descripcion ? `<p class="text-muted small mb-0 mt-2">${prod.descripcion}</p>` : '';
+        const descHTML = prod.descripcion ? `<div class="mt-2"><span class="label-text">Descripción:</span><br><span class="text-muted small">${prod.descripcion}</span></div>` : '';
 
         grid.innerHTML += `
             <div class="col-md-4 col-sm-6 mb-4">
                 <div class="card public-card h-100 shadow-sm border-0">
                     <img src="${imgSrc}" class="card-img-top public-img" onerror="this.src='https://via.placeholder.com/300x250?text=Error'">
                     <div class="card-body pb-2">
-                        <span class="badge bg-secondary mb-2">${prod.categoria}</span>
-                        <h5 class="card-title fw-bold mb-1">${prod.nombre}</h5>
-                        ${desc}
+                        <div class="mb-1">
+                            <span class="label-text">Categoría:</span> 
+                            <span class="badge bg-secondary">${prod.categoria}</span>
+                        </div>
+                        <div class="mb-2">
+                            <span class="label-text">Nombre:</span> 
+                            <h5 class="card-title fw-bold d-inline">${prod.nombre}</h5>
+                        </div>
+                        ${descHTML}
                     </div>
-                    <ul class="list-group list-group-flush mt-auto">${variantesHTML}</ul>
+                    <ul class="list-group list-group-flush mt-auto">
+                        ${variantesHTML}
+                    </ul>
                 </div>
             </div>
         `;
