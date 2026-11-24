@@ -216,7 +216,7 @@ window.abrirModalTransaccion = function() {
     document.getElementById('modal-tx-titulo').textContent = 'Registrar Nueva Transacción';
     document.getElementById('btn-guardar-tx').textContent = 'Guardar Transacción';
     document.getElementById('tx-prod-search').value = '';
-    document.getElementById('tx-variante').innerHTML = '';
+    document.getElementById('tx-variante').innerHTML = '<option value="">-- Seleccione variante --</option>';
     document.getElementById('tx-comentario').value = '';
     document.getElementById('tx-check-envio').checked = false;
     document.getElementById('div-envio').style.display = 'none';
@@ -317,63 +317,123 @@ function toggleVistaTipo(tipo) {
     if (isEntrada) { txItemsTemp.forEach(item => item.precio = 0); renderizarItemsTx(); }
 }
 
+// ==========================================
+// SELECCIÓN DE PRODUCTO Y VARIANTES (BLINDADO)
+// ==========================================
 window.seleccionarProductoPorNombre = function() {
-    const nombre = document.getElementById('tx-prod-search').value;
-    const prod = productosCache.find(p => p.nombre === nombre);
+    const nombreRaw = document.getElementById('tx-prod-search').value;
+    const nombre = nombreRaw.trim();
+    
+    if (!nombre) return;
+
+    // BÚSQUEDA ROBUSTA: Ignora mayúsculas, minúsculas y espacios
+    const prod = productosCache.find(p => p.nombre.trim().toLowerCase() === nombre.toLowerCase());
+    
     const selectVar = document.getElementById('tx-variante');
     const colUnidad = document.getElementById('col-tx-unidad');
-    selectVar.innerHTML = '';
+    selectVar.innerHTML = '<option value="">-- Seleccione variante --</option>';
     colUnidad.style.display = 'none';
 
-    if (!prod) { selectVar.innerHTML = '<option value="">-- No encontrado --</option>'; return; }
-    
-    const esTermopanel = prod.categoria.toUpperCase().includes('TERMOPANEL');
+    if (!prod) { 
+        selectVar.innerHTML = '<option value="">-- Producto no encontrado --</option>'; 
+        return; 
+    }
+
+    if (!prod.variantes || prod.variantes.length === 0) {
+        selectVar.innerHTML = '<option value="">-- Sin variantes registradas --</option>';
+        return;
+    }
+
+    const esTermopanel = (prod.categoria || '').toString().toUpperCase().includes('TERMOPANEL');
     if (esTermopanel) colUnidad.style.display = 'block';
 
     prod.variantes.forEach((v, index) => {
-        const stock = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
+        const stock = Number.isInteger(v.stock) ? v.stock : (parseFloat(v.stock) || 0).toFixed(2);
         const dan = v.danado || 0;
         const amar = v.amarillo || 0;
-        selectVar.innerHTML += `<option value="${index}">${v.medida} (N: ${stock} | D: ${dan} | A: ${amar})</option>`;
+        const medidaTxt = v.medida || 'Sin medida';
+        
+        // Opción con toda la info visible
+        selectVar.innerHTML += `<option value="${index}">${medidaTxt} (N: ${stock} | D: ${dan} | A: ${amar})</option>`;
     });
 };
 
 window.agregarItemTransaccion = function() {
-    const nombre = document.getElementById('tx-prod-search').value;
+    const nombreInput = document.getElementById('tx-prod-search').value.trim();
     const varIndex = document.getElementById('tx-variante').value;
     const cantidad = parseFloat(document.getElementById('tx-cantidad').value);
     const tipo = document.getElementById('tx-tipo').value;
     const tipoStock = document.getElementById('tx-tipo-stock').value;
-    const prod = productosCache.find(p => p.nombre === nombre);
-    
-    if (!prod || varIndex === "" || isNaN(cantidad) || cantidad <= 0) return showAlert('Aviso', 'Complete los campos válidos.', 'warning');
 
-    const esTermopanel = prod.categoria.toUpperCase().includes('TERMOPANEL');
+    // 1. Validaciones básicas
+    if (!nombreInput) return showAlert('Aviso', 'Seleccione un producto primero.', 'warning');
+    if (varIndex === "") return showAlert('Aviso', 'Debe seleccionar una variante/medida.', 'warning');
+    if (isNaN(cantidad) || cantidad <= 0) return showAlert('Aviso', 'Ingrese una cantidad válida.', 'warning');
+
+    // 2. Buscar producto (a prueba de errores de tipeo)
+    const prod = productosCache.find(p => p.nombre.trim().toLowerCase() === nombreInput.toLowerCase());
+    if (!prod) {
+        console.error('Producto no encontrado. Buscado:', nombreInput);
+        return showAlert('Error', 'Producto no encontrado. Recargue la página (Ctrl+F5) e intente de nuevo.', 'danger');
+    }
+
+    // 3. Buscar variante
+    const variante = prod.variantes[parseInt(varIndex)];
+    if (!variante) {
+        console.error('Variante no encontrada. Índice:', varIndex, 'Variantes:', prod.variantes);
+        return showAlert('Error', 'La variante seleccionada no es válida. Recargue la página (Ctrl+F5).', 'danger');
+    }
+
+    const esTermopanel = (prod.categoria || '').toString().toUpperCase().includes('TERMOPANEL');
     const unidad = esTermopanel ? document.getElementById('tx-unidad').value : 'uds';
-    const variante = prod.variantes[varIndex];
 
     let precio = 0;
     if (tipo === 'salida') {
         precio = parseFloat(document.getElementById('tx-precio').value);
-        if (isNaN(precio) || precio < 0) return showAlert('Aviso', 'Ingresa un precio válido.', 'warning');
+        if (isNaN(precio) || precio < 0) return showAlert('Aviso', 'Ingresa un precio de venta válido.', 'warning');
     }
 
-    // Validación de stock antes de agregar
+    // 4. Validación de stock y conversión de unidades
     if (tipo === 'salida') {
         let cantReal = cantidad;
+        
         if (esTermopanel && unidad === 'paneles') {
-            cantReal = cantidad * parseFloat(variante.medida);
+            const medidaNum = parseFloat(variante.medida);
+            if (isNaN(medidaNum)) {
+                console.error('Medida no numérica para Termopanel:', variante.medida);
+                return showAlert('Error', `La medida "${variante.medida}" no es un número válido para convertir a metros. Edite el producto.`, 'danger');
+            }
+            cantReal = cantidad * medidaNum;
         }
-        if (tipoStock === 'normal' && cantReal > variante.stock) return showAlert('Aviso', 'Stock normal insuficiente.', 'warning');
-        if (tipoStock === 'danado' && cantReal > (variante.danado || 0)) return showAlert('Aviso', 'Stock dañado insuficiente.', 'warning');
-        if (tipoStock === 'amarillo' && cantReal > (variante.amarillo || 0)) return showAlert('Aviso', 'Stock amarillo insuficiente.', 'warning');
+
+        if (tipoStock === 'normal' && cantReal > (variante.stock || 0)) {
+            return showAlert('Aviso', `Stock normal insuficiente. Disponible: ${variante.stock || 0} ${esTermopanel ? 'mts' : 'uds'}`, 'warning');
+        }
+        if (tipoStock === 'danado' && cantReal > (variante.danado || 0)) {
+            return showAlert('Aviso', `Stock dañado insuficiente. Disponible: ${variante.danado || 0}`, 'warning');
+        }
+        if (tipoStock === 'amarillo' && cantReal > (variante.amarillo || 0)) {
+            return showAlert('Aviso', `Stock amarillo insuficiente. Disponible: ${variante.amarillo || 0}`, 'warning');
+        }
     }
 
-    txItemsTemp.push({ prodId: prod.id, varIndex: parseInt(varIndex), nombre: prod.nombre, medida: variante.medida, cantidad, precio, tipoStock, unidad, esTermopanel });
+    // 5. Agregar a la lista
+    txItemsTemp.push({ 
+        prodId: prod.id, 
+        varIndex: parseInt(varIndex), 
+        nombre: prod.nombre, 
+        medida: variante.medida, 
+        cantidad, 
+        precio, 
+        tipoStock, 
+        unidad, 
+        esTermopanel 
+    });
     renderizarItemsTx();
     
+    // 6. Limpiar inputs
     document.getElementById('tx-prod-search').value = '';
-    document.getElementById('tx-variante').innerHTML = '';
+    document.getElementById('tx-variante').innerHTML = '<option value="">-- Seleccione variante --</option>';
     document.getElementById('tx-cantidad').value = '1';
     if (tipo === 'salida') document.getElementById('tx-precio').value = '';
     document.getElementById('col-tx-unidad').style.display = 'none';
