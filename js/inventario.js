@@ -7,6 +7,7 @@ let productosCache = [];
 let categoriasCache = [];
 let productoEditandoId = null;
 let isTermopanelMode = false;
+let loteMovimientosTemp = [];
 
 checkAuth((user) => {
     currentUser = user;
@@ -23,7 +24,7 @@ async function inicializarAppPrivada() {
 }
 
 // ==========================================
-// LÓGICA DE CATEGORÍAS
+// CATEGORÍAS
 // ==========================================
 async function cargarCategorias() {
     const q = query(collection(db, "categorias"), where("userId", "==", currentUser.uid));
@@ -62,38 +63,32 @@ window.eliminarCategoria = async function(id) {
 };
 
 // ==========================================
-// LÓGICA DE TERMOPANEL
+// LÓGICA TERMOPANEL
 // ==========================================
 function esCategoriaTermopanel(categoria) {
-    if (!categoria) return false;
-    return categoria.trim().toLowerCase().includes('termopanel');
+    return categoria && categoria.trim().toLowerCase().includes('termopanel');
 }
 
 window.verificarCategoriaTermopanel = function() {
     const cat = document.getElementById('prod-categoria').value;
     const nuevoModo = esCategoriaTermopanel(cat);
-
     if (nuevoModo !== isTermopanelMode) {
         isTermopanelMode = nuevoModo;
-        
-        // Guardar datos actuales de las filas antes de redibujar
         const filasActuales = [];
         document.querySelectorAll('.variante-row').forEach(fila => {
             filasActuales.push({
                 medida: fila.querySelector('.var-medida').value,
                 precio: fila.querySelector('.var-precio').value,
-                stock: fila.querySelector('.var-stock') ? fila.querySelector('.var-stock').value : (fila.querySelector('.var-stock-hidden') ? fila.querySelector('.var-stock-hidden').value : ''),
-                cantPaneles: fila.querySelector('.var-cant-paneles') ? fila.querySelector('.var-cant-paneles').value : ''
+                stock: fila.querySelector('.var-stock') ? fila.querySelector('.var-stock').value : fila.querySelector('.var-stock-hidden').value,
+                cantPaneles: fila.querySelector('.var-cant-paneles') ? fila.querySelector('.var-cant-paneles').value : '',
+                danado: fila.querySelector('.var-danado').value,
+                amarillo: fila.querySelector('.var-amarillo').value
             });
         });
 
         document.getElementById('contenedor-variantes').innerHTML = '';
-        
-        if (filasActuales.length === 0) {
-            agregarFilaVariante();
-        } else {
-            filasActuales.forEach(f => agregarFilaVariante(f.medida, f.precio, f.stock, f.cantPaneles));
-        }
+        if (filasActuales.length === 0) agregarFilaVariante();
+        else filasActuales.forEach(f => agregarFilaVariante(f.medida, f.precio, f.stock, f.cantPaneles, f.danado, f.amarillo));
     }
 };
 
@@ -104,15 +99,15 @@ window.calcularMtsFila = function(input) {
     const mts = medida * cant;
     
     row.querySelector('.var-mts').value = mts.toFixed(2);
-    row.querySelector('.var-stock-hidden').value = mts; // El stock real es el total de metros
+    row.querySelector('.var-stock-hidden').value = mts;
 };
 
 // ==========================================
-// LÓGICA DE PRODUCTOS
+// PRODUCTOS
 // ==========================================
 async function cargarProductos() {
     const tbody = document.getElementById('tabla-inventario');
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center">Cargando inventario...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Cargando inventario...</td></tr>';
     
     const q = query(collection(db, "inventario"), where("userId", "==", currentUser.uid));
     const snapshot = await getDocs(q);
@@ -142,15 +137,15 @@ window.filtrarInventario = function() {
     });
 
     tbody.innerHTML = '';
-
     if (filtrados.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No se encontraron productos.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No se encontraron productos.</td></tr>';
         return;
     }
 
     filtrados.forEach(prod => {
         let stockTotal = 0;
         let variantesHTML = '';
+        let danadosHTML = '';
         const esTermopanel = esCategoriaTermopanel(prod.categoria); 
 
         prod.variantes.forEach(v => {
@@ -160,8 +155,16 @@ window.filtrarInventario = function() {
             const unidad = esTermopanel ? 'mts' : 'uds';
             
             variantesHTML += `<span class="badge-stock">${v.medida}: $${v.precio.toFixed(2)} | <span class="${colorStock}">${stockMostrar} ${unidad}</span></span>`;
+            
+            if (v.danado > 0 || v.amarillo > 0) {
+                danadosHTML += `<div class="small mb-1"><b>${v.medida}:</b> `;
+                if (v.danado > 0) danadosHTML += `<span class="badge bg-danger me-1">Dañado: ${v.danado}</span>`;
+                if (v.amarillo > 0) danadosHTML += `<span class="badge bg-warning text-dark">Amarillo: ${v.amarillo}</span>`;
+                danadosHTML += `</div>`;
+            }
         });
 
+        if (danadosHTML === '') danadosHTML = '<span class="text-muted small">Ninguno</span>';
         const imgSrc = prod.fotoUrl ? prod.fotoUrl : 'https://via.placeholder.com/50?text=No';
         const unidadTotal = esTermopanel ? 'mts' : 'uds';
 
@@ -175,6 +178,7 @@ window.filtrarInventario = function() {
                 <td><span class="badge bg-secondary">${prod.categoria}</span></td>
                 <td>${variantesHTML}</td>
                 <td><b>${Number.isInteger(stockTotal) ? stockTotal : stockTotal.toFixed(2)} ${unidadTotal}</b></td>
+                <td>${danadosHTML}</td>
                 <td>
                     <button onclick="editarProducto('${prod.id}')" class="btn btn-sm btn-outline-primary" title="Editar">✏️</button>
                     <button onclick="eliminarProducto('${prod.id}')" class="btn btn-sm btn-outline-danger" title="Eliminar">🗑️</button>
@@ -210,7 +214,7 @@ window.actualizarPreviewFoto = function() {
     } else { container.style.display = 'none'; }
 };
 
-window.agregarFilaVariante = function(medida = '', precio = '', stock = '', cantPaneles = '') {
+window.agregarFilaVariante = function(medida = '', precio = '', stock = '', cantPaneles = '', danado = '0', amarillo = '0') {
     const container = document.getElementById('contenedor-variantes');
     const div = document.createElement('div');
     
@@ -221,6 +225,8 @@ window.agregarFilaVariante = function(medida = '', precio = '', stock = '', cant
             <input type="number" class="form-control form-control-sm var-precio" placeholder="Precio $" step="0.01" value="${precio}">
             <input type="number" class="form-control form-control-sm var-cant-paneles" placeholder="Cant. Paneles" value="${cantPaneles}" oninput="calcularMtsFila(this)">
             <input type="text" class="form-control form-control-sm var-mts" placeholder="Total Mts" value="${stock}" readonly style="background-color: #e9ecef;">
+            <input type="number" class="form-control form-control-sm var-danado" placeholder="Dañados" value="${danado}">
+            <input type="number" class="form-control form-control-sm var-amarillo" placeholder="Amarillos" value="${amarillo}">
             <input type="hidden" class="var-stock-hidden" value="${stock}">
             <button class="btn-remove-row" onclick="this.parentElement.remove()">X</button>
         `;
@@ -230,10 +236,11 @@ window.agregarFilaVariante = function(medida = '', precio = '', stock = '', cant
             <input type="text" class="form-control form-control-sm var-medida" placeholder="Medida" value="${medida}">
             <input type="number" class="form-control form-control-sm var-precio" placeholder="Precio $" step="0.01" value="${precio}">
             <input type="number" class="form-control form-control-sm var-stock" placeholder="Stock" step="0.01" value="${stock}">
+            <input type="number" class="form-control form-control-sm var-danado" placeholder="Dañados" value="${danado}">
+            <input type="number" class="form-control form-control-sm var-amarillo" placeholder="Amarillos" value="${amarillo}">
             <button class="btn-remove-row" onclick="this.parentElement.remove()">X</button>
         `;
     }
-    
     container.appendChild(div);
 };
 
@@ -244,13 +251,14 @@ window.guardarProducto = async function() {
     const fotoUrl = document.getElementById('prod-foto-url').value.trim();
     
     if (!nombre || !categoria) return showAlert('Aviso', 'Nombre y Categoría son obligatorios.', 'warning');
-
     const esTermopanel = esCategoriaTermopanel(categoria); 
     const variantes = [];
     
     document.querySelectorAll('.variante-row').forEach(fila => {
         const medida = fila.querySelector('.var-medida').value.trim();
         const precio = parseFloat(fila.querySelector('.var-precio').value);
+        const danado = parseFloat(fila.querySelector('.var-danado').value) || 0;
+        const amarillo = parseFloat(fila.querySelector('.var-amarillo').value) || 0;
         
         let stock = 0;
         let cantPaneles = null;
@@ -263,21 +271,13 @@ window.guardarProducto = async function() {
         }
         
         if (medida && !isNaN(precio)) {
-            variantes.push({ medida, precio, stock, cantPaneles });
+            variantes.push({ medida, precio, stock, cantPaneles, danado, amarillo });
         }
     });
 
     if (variantes.length === 0) return showAlert('Aviso', 'Agrega al menos una variante válida.', 'warning');
 
-    const payload = { 
-        userId: currentUser.uid, 
-        nombre, 
-        categoria, 
-        descripcion, 
-        fotoUrl, 
-        variantes, 
-        fechaActualizacion: new Date().toISOString() 
-    };
+    const payload = { userId: currentUser.uid, nombre, categoria, descripcion, fotoUrl, variantes, fechaActualizacion: new Date().toISOString() };
 
     try {
         if (productoEditandoId) {
@@ -307,9 +307,8 @@ window.editarProducto = function(id) {
     document.getElementById('prod-foto-url').value = prod.fotoUrl || '';
     
     actualizarPreviewFoto();
-
     document.getElementById('contenedor-variantes').innerHTML = '';
-    prod.variantes.forEach(v => agregarFilaVariante(v.medida, v.precio, v.stock, v.cantPaneles));
+    prod.variantes.forEach(v => agregarFilaVariante(v.medida, v.precio, v.stock, v.cantPaneles, v.danado || 0, v.amarillo || 0));
 
     new bootstrap.Modal(document.getElementById('modal-producto')).show();
 };
@@ -323,12 +322,14 @@ window.eliminarProducto = async function(id) {
 };
 
 // ==========================================
-// MOVIMIENTOS RÁPIDOS (Lote)
+// MOVIMIENTOS
 // ==========================================
 window.abrirModalMovimiento = function() {
+    loteMovimientosTemp = [];
     document.getElementById('tabla-lote-movimiento').querySelector('tbody').innerHTML = '';
     document.getElementById('mov-codigo-gen').value = '';
     document.getElementById('mov-num-dte').value = '';
+    document.getElementById('div-mov-unidad').style.display = 'none';
     
     const select = document.getElementById('mov-producto');
     select.innerHTML = '<option value="">-- Seleccionar --</option>';
@@ -342,7 +343,10 @@ window.abrirModalMovimiento = function() {
 window.cargarVariantesMovimiento = function() {
     const prodId = document.getElementById('mov-producto').value;
     const selectVar = document.getElementById('mov-variante');
+    const divUnidad = document.getElementById('div-mov-unidad');
     selectVar.innerHTML = '';
+    divUnidad.style.display = 'none';
+
     if (!prodId) {
         selectVar.innerHTML = '<option value="">-- Seleccione producto --</option>';
         return;
@@ -350,64 +354,136 @@ window.cargarVariantesMovimiento = function() {
     const prod = productosCache.find(p => p.id === prodId);
     const esTermopanel = esCategoriaTermopanel(prod.categoria);
     
+    if (esTermopanel) divUnidad.style.display = 'block';
+
     prod.variantes.forEach((v, index) => {
         const stockMostrar = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
         const unidad = esTermopanel ? 'mts' : 'uds';
-        selectVar.innerHTML += `<option value="${index}">${v.medida} (Stock: ${stockMostrar} ${unidad})</option>`;
+        selectVar.innerHTML += `<option value="${index}">${v.medida} (Normal: ${stockMostrar} ${unidad} | Dañ: ${v.danado || 0} | Am: ${v.amarillo || 0})</option>`;
     });
 };
 
-window.registrarLoteMovimiento = async function() {
+window.agregarItemAlLote = function() {
     const prodId = document.getElementById('mov-producto').value;
     const varIndex = document.getElementById('mov-variante').value;
+    const tipoStock = document.getElementById('mov-tipo-stock').value;
     const tipo = document.getElementById('mov-tipo').value;
     const cantidad = parseFloat(document.getElementById('mov-cantidad').value);
+    const prod = productosCache.find(p => p.id === prodId);
+
+    if (!prodId || varIndex === "" || isNaN(cantidad) || cantidad <= 0) return showAlert('Aviso', 'Complete los campos correctamente.', 'warning');
+
+    const esTermopanel = esCategoriaTermopanel(prod.categoria);
+    const unidad = esTermopanel ? document.getElementById('mov-unidad').value : 'uds';
+    const variante = prod.variantes[varIndex];
+
+    // Validar stock
+    if (tipo === 'salida') {
+        if (tipoStock === 'normal' && cantidad > variante.stock) return showAlert('Aviso', 'Stock normal insuficiente.', 'warning');
+        if (tipoStock === 'danado' && cantidad > (variante.danado || 0)) return showAlert('Aviso', 'Stock dañado insuficiente.', 'warning');
+        if (tipoStock === 'amarillo' && cantidad > (variante.amarillo || 0)) return showAlert('Aviso', 'Stock amarillo insuficiente.', 'warning');
+    }
+
+    // Agregar a la lista temporal
+    loteMovimientosTemp.push({
+        prodId, varIndex: parseInt(varIndex), prodNombre: prod.nombre, medida: variante.medida,
+        tipoStock, tipo, cantidad, unidad, esTermopanel
+    });
+    renderizarLoteTabla();
+    
+    document.getElementById('mov-producto').value = '';
+    document.getElementById('mov-variante').innerHTML = '<option value="">-- Seleccione producto --</option>';
+    document.getElementById('mov-cantidad').value = '1';
+    document.getElementById('div-mov-unidad').style.display = 'none';
+};
+
+function renderizarLoteTabla() {
+    const tbody = document.getElementById('tabla-lote-movimiento').querySelector('tbody');
+    tbody.innerHTML = '';
+    loteMovimientosTemp.forEach((item, index) => {
+        let labelStock = item.tipoStock === 'normal' ? 'Normal' : (item.tipoStock === 'danado' ? 'Dañado' : 'Amarillo');
+        let labelUnidad = item.esTermopanel ? (item.unidad === 'mts' ? 'Metros' : 'Paneles') : 'Uds';
+        tbody.innerHTML += `
+            <tr>
+                <td>${item.prodNombre}</td>
+                <td>${item.medida}</td>
+                <td><span class="badge ${item.tipoStock === 'normal' ? 'bg-primary' : (item.tipoStock === 'danado' ? 'bg-danger' : 'bg-warning text-dark')}">${labelStock}</span></td>
+                <td>${labelUnidad}</td>
+                <td><span class="badge ${item.tipo === 'entrada' ? 'bg-success' : 'bg-secondary'}">${item.tipo}</span></td>
+                <td>${item.cantidad}</td>
+                <td><button class="btn btn-sm btn-outline-danger" onclick="eliminarItemLote(${index})">X</button></td>
+            </tr>
+        `;
+    });
+}
+
+window.eliminarItemLote = function(index) { loteMovimientosTemp.splice(index, 1); renderizarLoteTabla(); };
+
+window.registrarLoteMovimiento = async function() {
+    if (loteMovimientosTemp.length === 0) return showAlert('Aviso', 'No has agregado movimientos.', 'warning');
+
     const codGen = document.getElementById('mov-codigo-gen').value.trim();
     const numDte = document.getElementById('mov-num-dte').value.trim();
 
-    if (!prodId || varIndex === "" || isNaN(cantidad) || cantidad <= 0) {
-        return showAlert('Aviso', 'Complete producto, variante y cantidad válida.', 'warning');
-    }
-
-    const prod = productosCache.find(p => p.id === prodId);
-    let stockActual = prod.variantes[varIndex].stock;
-
-    if (tipo === 'salida' && cantidad > stockActual) return showAlert('Aviso', 'Stock insuficiente.', 'warning');
-
-    prod.variantes[varIndex].stock += (tipo === 'entrada' ? cantidad : -cantidad);
-    
     try {
-        await updateDoc(doc(db, "inventario", prodId), { variantes: prod.variantes });
-        await addDoc(collection(db, "movimientos_inventario"), {
-            userId: currentUser.uid, productoId: prodId, productoNombre: prod.nombre,
-            medida: prod.variantes[varIndex].medida, tipo, cantidad,
-            comentario: '', codigoGeneracion: codGen, numeroDTE: numDte, fecha: new Date().toISOString()
-        });
-        showAlert('Éxito', 'Movimiento registrado.', 'success');
+        for (const item of loteMovimientosTemp) {
+            const prod = productosCache.find(p => p.id === item.prodId);
+            const variante = prod.variantes[item.varIndex];
+            
+            let cantAfectada = item.cantidad;
+            let cantPanelesAfectada = 0;
+
+            if (item.esTermopanel && item.unidad === 'paneles') {
+                const medida = parseFloat(variante.medida);
+                cantAfectada = item.cantidad * medida; // Convertir paneles a metros
+                cantPanelesAfectada = item.cantidad;
+            }
+
+            // Lógica para modificar el stock correspondiente
+            if (item.tipo === 'entrada') {
+                if (item.tipoStock === 'normal') {
+                    variante.stock += cantAfectada;
+                    if (item.esTermopanel && item.unidad === 'paneles') variante.cantPaneles += cantPanelesAfectada;
+                }
+                if (item.tipoStock === 'danado') variante.danado = (variante.danado || 0) + cantAfectada;
+                if (item.tipoStock === 'amarillo') variante.amarillo = (variante.amarillo || 0) + cantAfectada;
+            } else {
+                if (item.tipoStock === 'normal') {
+                    variante.stock -= cantAfectada;
+                    if (item.esTermopanel && item.unidad === 'paneles') variante.cantPaneles -= cantPanelesAfectada;
+                }
+                if (item.tipoStock === 'danado') variante.danado -= cantAfectada;
+                if (item.tipoStock === 'amarillo') variante.amarillo -= cantAfectada;
+            }
+
+            // Actualizar en Firestore
+            await updateDoc(doc(db, "inventario", item.prodId), { variantes: prod.variantes });
+
+            // Registrar en el historial
+            await addDoc(collection(db, "movimientos_inventario"), {
+                userId: currentUser.uid, productoId: item.prodId, productoNombre: item.prodNombre,
+                medida: item.medida, tipo: item.tipo, tipoStock: item.tipoStock,
+                cantidad: item.cantidad, unidad: item.esTermopanel ? item.unidad : 'uds',
+                cantidadAfectadaStock: cantAfectada,
+                comentario: '', codigoGeneracion: codGen, numeroDTE: numDte, fecha: new Date().toISOString()
+            });
+        }
+
+        showAlert('Éxito', 'Lote de movimientos registrado.', 'success');
         bootstrap.Modal.getInstance(document.getElementById('modal-movimiento')).hide();
         await cargarProductos();
     } catch (e) { showAlert('Error', e.message, 'danger'); }
 };
 
 // ==========================================
-// COMPARTIR ENLACES (URLs LIMPIAS)
+// COMPARTIR ENLACES
 // ==========================================
 window.copiarEnlacePublico = function() {
     const baseUrl = window.location.origin + window.location.pathname.replace('inventario.html', '');
-    // Enlace al catálogo con stock y precios
-    const publicUrl = `${baseUrl}stock.html`; 
-    
-    navigator.clipboard.writeText(publicUrl).then(() => {
-        showAlert('Éxito', 'Enlace del catálogo con stock copiado.', 'success');
-    });
+    navigator.clipboard.writeText(`${baseUrl}stock.html`).then(() => showAlert('Éxito', 'Enlace de stock copiado.', 'success'));
 };
 
 window.copiarEnlacePublicoBasico = function() {
     const baseUrl = window.location.origin + window.location.pathname.replace('inventario.html', '');
-    // Enlace al catálogo básico (solo medidas)
-    const publicUrl = `${baseUrl}catalogo.html`;
-    
-    navigator.clipboard.writeText(publicUrl).then(() => {
-        showAlert('Éxito', 'Enlace del catálogo básico copiado.', 'success');
-    });
+    navigator.clipboard.writeText(`${baseUrl}catalogo.html`).then(() => showAlert('Éxito', 'Enlace del catálogo copiado.', 'success'));
 };
