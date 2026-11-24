@@ -24,9 +24,6 @@ checkAuth(async (user) => {
 
 window.logout = function() { signOut(auth).then(() => window.location.href = 'index.html'); };
 
-// ==========================================
-// CARGA DE DATOS
-// ==========================================
 async function cargarProductos() {
     const q = query(collection(db, "inventario"), where("userId", "==", currentUser.uid));
     const snap = await getDocs(q);
@@ -69,23 +66,21 @@ async function cargarTransacciones() {
             let varIndex = prod ? prod.variantes.findIndex(v => v.medida === mov.medida) : -1;
             gruposAntiguos[key].items.push({
                 docId: mov.id, prodId: mov.productoId, varIndex,
-                nombre: mov.productoNombre, medida: mov.medida, cantidad: mov.cantidad, precio: mov.precioUnitario || 0, subtotal: mov.subtotal || 0
+                nombre: mov.productoNombre, medida: mov.medida, cantidad: mov.cantidad, 
+                precio: mov.precioUnitario || 0, subtotal: mov.subtotal || 0,
+                tipoStock: mov.tipoStock || 'normal', unidad: mov.unidad || 'uds'
             });
             gruposAntiguos[key].docIds.push(mov.id);
         });
 
         transaccionesCache = [...nuevasTx, ...Object.values(gruposAntiguos)];
         transaccionesCache.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-
         filtrarMovimientos(); 
     } catch (error) {
         acordeon.innerHTML = `<div class="text-center text-danger p-3">Error: ${error.message}</div>`;
     }
 }
 
-// ==========================================
-// RENDERIZADO Y FILTROS
-// ==========================================
 window.filtrarMovimientos = function() {
     const acordeon = document.getElementById('acordeon-movimientos');
     const buscador = document.getElementById('mov-buscador').value.toLowerCase().trim();
@@ -122,11 +117,18 @@ window.filtrarMovimientos = function() {
                 const cant = Number.isInteger(item.cantidad) ? item.cantidad : item.cantidad.toFixed(2);
                 const subtotal = item.subtotal || (item.precio * item.cantidad) || 0;
                 sumaTotal += subtotal;
-                filasHTML += `<tr><td>${item.nombre}</td><td>${item.medida}</td><td>${cant}</td><td class="col-dinero">${item.precio ? '$' + item.precio.toFixed(2) : '-'}</td><td class="col-dinero">${subtotal ? '$' + subtotal.toFixed(2) : '-'}</td></tr>`;
+                const badgeStock = item.tipoStock === 'danado' ? '<span class="badge bg-danger">Dañado</span>' : (item.tipoStock === 'amarillo' ? '<span class="badge bg-warning text-dark">Amarillo</span>' : '');
+                const txtUnidad = item.unidad === 'paneles' ? 'Paneles' : (item.unidad === 'mts' ? 'Mts' : 'Uds');
+                
+                filasHTML += `<tr>
+                    <td>${item.nombre}</td><td>${item.medida}</td>
+                    <td>${badgeStock}</td><td>${txtUnidad}</td><td>${cant}</td>
+                    <td class="col-dinero">${item.precio ? '$' + item.precio.toFixed(2) : '-'}</td>
+                    <td class="col-dinero">${subtotal ? '$' + subtotal.toFixed(2) : '-'}</td>
+                </tr>`;
             });
         }
         const totalMostrar = tx.total || sumaTotal;
-
         let pagosHTML = tx.pagos && tx.pagos.length > 0 ? tx.pagos.map(p => `<span class="badge bg-info text-dark me-1">${p.metodo}: $${p.monto.toFixed(2)}</span>`).join('') : '<span class="text-muted small">No registrados</span>';
 
         let estadoBadge = '';
@@ -135,9 +137,7 @@ window.filtrarMovimientos = function() {
         else if (tx.estadoEntrega !== 'Histórico' && tx.estadoEntrega !== '') estadoBadge = `<span class="badge bg-success me-1">${tx.estadoEntrega}</span>`;
 
         let produccionBadge = tx.enProduccion ? `<span class="badge bg-danger me-1">EN PRODUCCIÓN</span>` : '';
-
         const btnProduccion = tx.isNew ? `<button onclick="toggleProduccionRapido('${tx.id}', ${!!tx.enProduccion})" class="btn btn-sm ${tx.enProduccion ? 'btn-outline-danger' : 'btn-outline-secondary'} me-2">${tx.enProduccion ? 'Quitar Producción' : 'Marcar Producción'}</button>` : '';
-
         let dtesHeader = tx.dtes && tx.dtes.length > 0 ? tx.dtes.map(d => `<span class="badge bg-secondary me-1">${d.codigo ? d.codigo.substring(0,8)+'...' : ''} ${d.numero}</span>`).join('') : '<span class="text-muted small">Sin DTE</span>';
 
         const botonesAccion = `
@@ -156,8 +156,7 @@ window.filtrarMovimientos = function() {
                         <div class="d-flex w-100 justify-content-between align-items-center pe-3">
                             <div>
                                 <span class="badge ${tx.tipo === 'entrada' ? 'bg-success' : 'bg-danger'} me-2">${tx.motivo}</span>
-                                ${produccionBadge}
-                                ${estadoBadge}
+                                ${produccionBadge} ${estadoBadge}
                                 <div class="mt-1 small text-muted">${dtesHeader}</div>
                             </div>
                             <span class="text-muted small text-end">${fechaStr} ${tx.tipo === 'salida' ? `<br> <b>Total: $${totalMostrar.toFixed(2)}</b>` : ''}</span>
@@ -176,19 +175,14 @@ window.filtrarMovimientos = function() {
                             <div class="col-md-6 p-3">
                                 <h6 class="text-primary fw-bold mb-2">Pagos y Detalles</h6>
                                 <ul class="list-group list-group-flush mb-2">
-                                    ${tx.tipo === 'salida' ? `
-                                        <li class="list-group-item py-1 px-0 border-0 small"><b>Pagos:</b> ${pagosHTML}</li>
-                                        <li class="list-group-item py-1 px-0 border-0 small"><b>Envío cobrado:</b> $${(tx.montoEnvio || 0).toFixed(2)}</li>
-                                    ` : ''}
+                                    ${tx.tipo === 'salida' ? `<li class="list-group-item py-1 px-0 border-0 small"><b>Pagos:</b> ${pagosHTML}</li><li class="list-group-item py-1 px-0 border-0 small"><b>Envío:</b> $${(tx.montoEnvio || 0).toFixed(2)}</li>` : ''}
                                     <li class="list-group-item py-1 px-0 border-0 small"><b>Estado:</b> ${tx.estadoEntrega || 'N/A'}</li>
-                                    ${tx.fechaEntrega ? `<li class="list-group-item py-1 px-0 border-0 small"><b>Fecha Entrega:</b> ${tx.fechaEntrega}</li>` : ''}
                                     <li class="list-group-item py-1 px-0 border-0 small"><b>Comentario:</b> ${tx.comentario || 'Sin comentarios'}</li>
                                 </ul>
                             </div>
                         </div>
-                        
                         <table class="table table-sm mb-0">
-                            <thead class="table-light"><tr><th>Producto</th><th>Medida</th><th>Cant.</th><th class="col-dinero">Precio</th><th class="col-dinero">Subtotal</th></tr></thead>
+                            <thead class="table-light"><tr><th>Producto</th><th>Medida</th><th>Stock</th><th>Unidad</th><th>Cant.</th><th class="col-dinero">Precio</th><th class="col-dinero">Subtotal</th></tr></thead>
                             <tbody>${filasHTML}</tbody>
                         </table>
                         ${botonesAccion}
@@ -208,15 +202,10 @@ window.limpiarFiltrosMov = function() {
 };
 
 window.toggleProduccionRapido = async function(id, estadoActual) {
-    try {
-        await updateDoc(doc(db, "transacciones", id), { enProduccion: !estadoActual });
-        await cargarTransacciones();
-    } catch (error) { showAlert('Error', error.message, 'danger'); }
+    try { await updateDoc(doc(db, "transacciones", id), { enProduccion: !estadoActual }); await cargarTransacciones(); } catch (error) { showAlert('Error', error.message, 'danger'); }
 };
 
-window.irANotaEntrega = function(txId) {
-    window.location.href = `notas_entrega.html?txId=${txId}`;
-};
+window.irANotaEntrega = function(txId) { window.location.href = `notas_entrega.html?txId=${txId}`; };
 
 // ==========================================
 // MODAL: CREAR / EDITAR
@@ -224,7 +213,6 @@ window.irANotaEntrega = function(txId) {
 window.abrirModalTransaccion = function() {
     transaccionEditandoId = null;
     txItemsTemp = []; txPagosTemp = []; txDtesTemp = [];
-    
     document.getElementById('modal-tx-titulo').textContent = 'Registrar Nueva Transacción';
     document.getElementById('btn-guardar-tx').textContent = 'Guardar Transacción';
     document.getElementById('tx-prod-search').value = '';
@@ -238,11 +226,11 @@ window.abrirModalTransaccion = function() {
     document.getElementById('tx-tipo').value = 'salida';
     document.getElementById('tx-check-produccion').checked = false;
     document.getElementById('tx-fecha-creacion').value = getFormattedDate(new Date());
-
     document.getElementById('temp-dte-codigo').value = '';
     document.getElementById('temp-dte-numero').value = '';
-    renderizarDtesTemp();
+    document.getElementById('col-tx-unidad').style.display = 'none';
 
+    renderizarDtesTemp();
     actualizarMotivos();
     renderizarItemsTx();
     renderizarPagosTx();
@@ -269,21 +257,16 @@ window.editarTransaccion = function(id) {
     
     document.getElementById('modal-tx-titulo').textContent = tx.isNew ? 'Editar Transacción' : 'Completar Datos Históricos';
     document.getElementById('btn-guardar-tx').textContent = tx.isNew ? 'Actualizar Transacción' : 'Guardar y Convertir';
-
     document.getElementById('tx-tipo').value = tx.tipo;
-    actualizarMotivos(); // Esto llamará a toggleVista y mostrará/ocultará todo
-    
+    actualizarMotivos(); 
     document.getElementById('tx-motivo').value = tx.motivo.includes('Histórico') ? (tx.tipo === 'salida' ? 'Venta' : 'Pedido especial') : tx.motivo;
     document.getElementById('tx-comentario').value = tx.comentario || '';
     document.getElementById('tx-check-produccion').checked = tx.enProduccion || false;
-    
     const fechaTx = tx.fecha ? new Date(tx.fecha) : new Date();
     document.getElementById('tx-fecha-creacion').value = getFormattedDate(fechaTx);
-
     document.getElementById('tx-check-envio').checked = tx.montoEnvio > 0;
     toggleEnvio();
     document.getElementById('tx-monto-envio').value = tx.montoEnvio || 0;
-    
     document.getElementById('tx-estado-entrega').value = (tx.estadoEntrega === 'Histórico') ? 'Entregado en tienda' : tx.estadoEntrega;
     toggleFechaPiloto();
     document.getElementById('tx-fecha-entrega').value = tx.fechaEntrega || '';
@@ -292,15 +275,11 @@ window.editarTransaccion = function(id) {
     renderizarItemsTx();
     renderizarPagosTx();
     calcularTotalesTransaccion();
-    
     new bootstrap.Modal(document.getElementById('modal-transaccion')).show();
 };
 
 window.cancelarTransaccion = function() { bootstrap.Modal.getInstance(document.getElementById('modal-transaccion')).hide(); };
 
-// ==========================================
-// LÓGICA DE DTEs
-// ==========================================
 window.agregarDTEAlLote = function() {
     const codigo = document.getElementById('temp-dte-codigo').value.trim();
     const numero = document.getElementById('temp-dte-numero').value.trim();
@@ -310,7 +289,6 @@ window.agregarDTEAlLote = function() {
     document.getElementById('temp-dte-numero').value = '';
     renderizarDtesTemp();
 };
-
 function renderizarDtesTemp() {
     const lista = document.getElementById('lista-dtes-temp');
     lista.innerHTML = '';
@@ -320,52 +298,43 @@ function renderizarDtesTemp() {
 }
 window.eliminarDTETemp = function(index) { txDtesTemp.splice(index, 1); renderizarDtesTemp(); };
 
-// ==========================================
-// LÓGICA DE TIPO Y VISTA (NUEVO)
-// ==========================================
 window.actualizarMotivos = function() {
     const tipo = document.getElementById('tx-tipo').value;
     const selectMotivo = document.getElementById('tx-motivo');
     selectMotivo.innerHTML = tipo === 'salida' 
         ? `<option value="Venta">Venta</option><option value="Dañadas">Dañadas</option><option value="Muestras">Muestras</option>`
         : `<option value="Pedido especial">Pedido especial</option><option value="Exportación">Exportación</option><option value="Devolución">Devolución</option>`;
-    
     toggleVistaTipo(tipo);
 };
 
 function toggleVistaTipo(tipo) {
     const isEntrada = tipo === 'entrada';
-    
-    // Ocultar/Mostrar inputs y secciones
-    document.getElementById('col-form-precio').style.display = isEntrada ? 'none' : 'block';
+    document.getElementById('col-tx-precio').style.display = isEntrada ? 'none' : 'block';
     document.getElementById('section-envio-totales').style.display = isEntrada ? 'none' : 'flex';
     document.getElementById('section-pagos').style.display = isEntrada ? 'none' : 'block';
     document.getElementById('section-entrega').style.display = isEntrada ? 'none' : 'block';
-
-    // Ocultar/Mostrar columnas de la tabla temporal
-    document.querySelectorAll('.col-dinero').forEach(el => {
-        el.style.display = isEntrada ? 'none' : 'table-cell';
-    });
-    
-    // Si es entrada, forzamos todos los precios a 0 para evitar errores
-    if (isEntrada) {
-        txItemsTemp.forEach(item => item.precio = 0);
-        renderizarItemsTx();
-    }
+    document.querySelectorAll('.col-dinero').forEach(el => { el.style.display = isEntrada ? 'none' : 'table-cell'; });
+    if (isEntrada) { txItemsTemp.forEach(item => item.precio = 0); renderizarItemsTx(); }
 }
 
-// ==========================================
-// LÓGICA DE PRODUCTOS Y PAGOS
-// ==========================================
 window.seleccionarProductoPorNombre = function() {
     const nombre = document.getElementById('tx-prod-search').value;
     const prod = productosCache.find(p => p.nombre === nombre);
     const selectVar = document.getElementById('tx-variante');
+    const colUnidad = document.getElementById('col-tx-unidad');
     selectVar.innerHTML = '';
+    colUnidad.style.display = 'none';
+
     if (!prod) { selectVar.innerHTML = '<option value="">-- No encontrado --</option>'; return; }
+    
+    const esTermopanel = prod.categoria.toUpperCase().includes('TERMOPANEL');
+    if (esTermopanel) colUnidad.style.display = 'block';
+
     prod.variantes.forEach((v, index) => {
-        const stockMostrar = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
-        selectVar.innerHTML += `<option value="${index}">${v.medida} (Stock: ${stockMostrar})</option>`;
+        const stock = Number.isInteger(v.stock) ? v.stock : v.stock.toFixed(2);
+        const dan = v.danado || 0;
+        const amar = v.amarillo || 0;
+        selectVar.innerHTML += `<option value="${index}">${v.medida} (N: ${stock} | D: ${dan} | A: ${amar})</option>`;
     });
 };
 
@@ -374,27 +343,40 @@ window.agregarItemTransaccion = function() {
     const varIndex = document.getElementById('tx-variante').value;
     const cantidad = parseFloat(document.getElementById('tx-cantidad').value);
     const tipo = document.getElementById('tx-tipo').value;
+    const tipoStock = document.getElementById('tx-tipo-stock').value;
+    const prod = productosCache.find(p => p.nombre === nombre);
     
+    if (!prod || varIndex === "" || isNaN(cantidad) || cantidad <= 0) return showAlert('Aviso', 'Complete los campos válidos.', 'warning');
+
+    const esTermopanel = prod.categoria.toUpperCase().includes('TERMOPANEL');
+    const unidad = esTermopanel ? document.getElementById('tx-unidad').value : 'uds';
+    const variante = prod.variantes[varIndex];
+
     let precio = 0;
     if (tipo === 'salida') {
         precio = parseFloat(document.getElementById('tx-precio').value);
         if (isNaN(precio) || precio < 0) return showAlert('Aviso', 'Ingresa un precio válido.', 'warning');
     }
 
-    if (!nombre || varIndex === "" || isNaN(cantidad) || cantidad <= 0) {
-        return showAlert('Aviso', 'Complete producto, variante y cantidad válida.', 'warning');
+    // Validación de stock antes de agregar
+    if (tipo === 'salida') {
+        let cantReal = cantidad;
+        if (esTermopanel && unidad === 'paneles') {
+            cantReal = cantidad * parseFloat(variante.medida);
+        }
+        if (tipoStock === 'normal' && cantReal > variante.stock) return showAlert('Aviso', 'Stock normal insuficiente.', 'warning');
+        if (tipoStock === 'danado' && cantReal > (variante.danado || 0)) return showAlert('Aviso', 'Stock dañado insuficiente.', 'warning');
+        if (tipoStock === 'amarillo' && cantReal > (variante.amarillo || 0)) return showAlert('Aviso', 'Stock amarillo insuficiente.', 'warning');
     }
 
-    const prod = productosCache.find(p => p.nombre === nombre);
-    const variante = prod.variantes[varIndex];
-
-    txItemsTemp.push({ prodId: prod.id, varIndex: parseInt(varIndex), nombre: prod.nombre, medida: variante.medida, cantidad, precio });
+    txItemsTemp.push({ prodId: prod.id, varIndex: parseInt(varIndex), nombre: prod.nombre, medida: variante.medida, cantidad, precio, tipoStock, unidad, esTermopanel });
     renderizarItemsTx();
     
     document.getElementById('tx-prod-search').value = '';
     document.getElementById('tx-variante').innerHTML = '';
     document.getElementById('tx-cantidad').value = '1';
     if (tipo === 'salida') document.getElementById('tx-precio').value = '';
+    document.getElementById('col-tx-unidad').style.display = 'none';
 };
 
 function renderizarItemsTx() {
@@ -403,11 +385,17 @@ function renderizarItemsTx() {
     txItemsTemp.forEach((item, index) => {
         const subtotal = item.cantidad * item.precio;
         const cant = Number.isInteger(item.cantidad) ? item.cantidad : item.cantidad.toFixed(2);
+        const badgeStock = item.tipoStock === 'danado' ? '<span class="badge bg-danger">Dañado</span>' : (item.tipoStock === 'amarillo' ? '<span class="badge bg-warning text-dark">Amarillo</span>' : '<span class="badge bg-primary">Normal</span>');
+        const txtUnidad = item.unidad === 'paneles' ? 'Paneles' : (item.unidad === 'mts' ? 'Mts' : 'Uds');
+        
         tbody.innerHTML += `
-            <tr><td>${item.nombre}</td><td>${item.medida}</td><td>${cant}</td>
-            <td class="col-dinero">${item.precio ? '$' + item.precio.toFixed(2) : '-'}</td>
-            <td class="col-dinero">${subtotal ? '$' + subtotal.toFixed(2) : '-'}</td>
-            <td><button class="btn btn-sm btn-outline-danger" onclick="eliminarItemTx(${index})">X</button></td></tr>`;
+            <tr>
+                <td>${item.nombre}</td><td>${item.medida}</td>
+                <td>${badgeStock}</td><td>${txtUnidad}</td><td>${cant}</td>
+                <td class="col-dinero">${item.precio ? '$' + item.precio.toFixed(2) : '-'}</td>
+                <td class="col-dinero">${subtotal ? '$' + subtotal.toFixed(2) : '-'}</td>
+                <td><button class="btn btn-sm btn-outline-danger" onclick="eliminarItemTx(${index})">X</button></td>
+            </tr>`;
     });
     calcularTotalesTransaccion();
 }
@@ -464,32 +452,22 @@ window.toggleFechaPiloto = function() {
     document.getElementById('div-fecha-entrega').style.display = (document.getElementById('tx-estado-entrega').value === 'Entregado por Piloto') ? 'block' : 'none';
 };
 
-// ==========================================
-// GUARDAR TRANSACCIÓN
-// ==========================================
 window.guardarTransaccion = async function() {
     if (txItemsTemp.length === 0) return showAlert('Aviso', 'No has agregado productos.', 'warning');
-
     const tipo = document.getElementById('tx-tipo').value;
     
-    // Validaciones y cálculos solo si es SALIDA
     let subtotal = 0, envio = 0, total = 0, totalPagado = 0;
-    
     if (tipo === 'salida') {
         subtotal = txItemsTemp.reduce((sum, item) => sum + (item.cantidad * item.precio), 0);
         envio = parseFloat(document.getElementById('tx-monto-envio').value) || 0;
         total = subtotal + envio;
         totalPagado = txPagosTemp.reduce((sum, p) => sum + p.monto, 0);
-
-        if (Math.abs(totalPagado - total) > 0.01) {
-            return showAlert('Aviso', `Pagos ($${totalPagado.toFixed(2)}) no coinciden con Total ($${total.toFixed(2)}).`, 'warning');
-        }
+        if (Math.abs(totalPagado - total) > 0.01) return showAlert('Aviso', `Pagos ($${totalPagado.toFixed(2)}) no coinciden con Total ($${total.toFixed(2)}).`, 'warning');
     }
 
     const fechaInput = document.getElementById('tx-fecha-creacion').value;
     const fechaFinal = fechaInput ? `${fechaInput}T12:00:00.000Z` : new Date().toISOString();
     const loteId = 'TX-' + Date.now();
-    
     const btnGuardar = document.getElementById('btn-guardar-tx');
     btnGuardar.disabled = true;
     btnGuardar.textContent = 'Procesando...';
@@ -500,7 +478,18 @@ window.guardarTransaccion = async function() {
             for (const item of oldTx.items) {
                 const prod = productosCache.find(p => p.id === item.prodId);
                 if (prod && prod.variantes[item.varIndex]) {
-                    prod.variantes[item.varIndex].stock += (oldTx.tipo === 'entrada' ? -item.cantidad : item.cantidad);
+                    let cantReal = item.cantidad;
+                    if (item.esTermopanel && item.unidad === 'paneles') cantReal = item.cantidad * parseFloat(item.medida);
+                    
+                    if (item.tipo === 'entrada') {
+                        if (item.tipoStock === 'normal') { prod.variantes[item.varIndex].stock -= cantReal; if(item.esTermopanel && item.unidad === 'paneles') prod.variantes[item.varIndex].cantPaneles -= item.cantidad; }
+                        if (item.tipoStock === 'danado') prod.variantes[item.varIndex].danado -= cantReal;
+                        if (item.tipoStock === 'amarillo') prod.variantes[item.varIndex].amarillo -= cantReal;
+                    } else {
+                        if (item.tipoStock === 'normal') { prod.variantes[item.varIndex].stock += cantReal; if(item.esTermopanel && item.unidad === 'paneles') prod.variantes[item.varIndex].cantPaneles += item.cantidad; }
+                        if (item.tipoStock === 'danado') prod.variantes[item.varIndex].danado += cantReal;
+                        if (item.tipoStock === 'amarillo') prod.variantes[item.varIndex].amarillo += cantReal;
+                    }
                     await updateDoc(doc(db, "inventario", item.prodId), { variantes: prod.variantes });
                 }
             }
@@ -518,29 +507,37 @@ window.guardarTransaccion = async function() {
 
         const txData = {
             userId: currentUser.uid, tipo, motivo: document.getElementById('tx-motivo').value,
-            dtes: txDtesTemp,
-            enProduccion: document.getElementById('tx-check-produccion').checked,
+            dtes: txDtesTemp, enProduccion: document.getElementById('tx-check-produccion').checked,
             subtotal, montoEnvio: envio, total, pagos: tipo === 'salida' ? txPagosTemp : [],
             estadoEntrega: tipo === 'salida' ? document.getElementById('tx-estado-entrega').value : 'N/A', 
             fechaEntrega: tipo === 'salida' ? document.getElementById('tx-fecha-entrega').value : '',
             comentario: document.getElementById('tx-comentario').value.trim(), 
-            items: txItemsTemp, loteId, 
-            fecha: fechaFinal 
+            items: txItemsTemp, loteId, fecha: fechaFinal 
         };
-
         const txRef = await addDoc(collection(db, "transacciones"), txData);
 
         for (const item of txItemsTemp) {
             const prod = productosCache.find(p => p.id === item.prodId);
+            let cantReal = item.cantidad;
+            if (item.esTermopanel && item.unidad === 'paneles') cantReal = item.cantidad * parseFloat(item.medida);
+
             if (prod && prod.variantes[item.varIndex]) {
-                prod.variantes[item.varIndex].stock += (tipo === 'entrada' ? item.cantidad : -item.cantidad);
+                if (tipo === 'entrada') {
+                    if (item.tipoStock === 'normal') { prod.variantes[item.varIndex].stock += cantReal; if(item.esTermopanel && item.unidad === 'paneles') prod.variantes[item.varIndex].cantPaneles += item.cantidad; }
+                    if (item.tipoStock === 'danado') prod.variantes[item.varIndex].danado = (prod.variantes[item.varIndex].danado || 0) + cantReal;
+                    if (item.tipoStock === 'amarillo') prod.variantes[item.varIndex].amarillo = (prod.variantes[item.varIndex].amarillo || 0) + cantReal;
+                } else {
+                    if (item.tipoStock === 'normal') { prod.variantes[item.varIndex].stock -= cantReal; if(item.esTermopanel && item.unidad === 'paneles') prod.variantes[item.varIndex].cantPaneles -= item.cantidad; }
+                    if (item.tipoStock === 'danado') prod.variantes[item.varIndex].danado -= cantReal;
+                    if (item.tipoStock === 'amarillo') prod.variantes[item.varIndex].amarillo -= cantReal;
+                }
                 await updateDoc(doc(db, "inventario", item.prodId), { variantes: prod.variantes });
             }
 
             await addDoc(collection(db, "movimientos_inventario"), {
-                userId: currentUser.uid, transaccionId: txRef.id,
-                productoId: item.prodId, productoNombre: item.nombre,
-                medida: item.medida, tipo, cantidad: item.cantidad,
+                userId: currentUser.uid, transaccionId: txRef.id, productoId: item.prodId, productoNombre: item.nombre,
+                medida: item.medida, tipo, tipoStock: item.tipoStock, cantidad: item.cantidad, unidad: item.unidad,
+                cantidadAfectadaStock: cantReal,
                 precioUnitario: tipo === 'salida' ? item.precio : 0, subtotal: tipo === 'salida' ? (item.cantidad * item.precio) : 0,
                 loteId, fecha: fechaFinal 
             });
@@ -558,9 +555,6 @@ window.guardarTransaccion = async function() {
     }
 };
 
-// ==========================================
-// ELIMINAR TRANSACCIÓN
-// ==========================================
 window.eliminarTransaccion = async function(id) {
     const confirmado = await showConfirm('¿Estás seguro de eliminar esta transacción? El stock de los productos será devuelto al inventario.');
     if (!confirmado) return;
@@ -570,7 +564,18 @@ window.eliminarTransaccion = async function(id) {
         for (const item of tx.items) {
             const prod = productosCache.find(p => p.id === item.prodId);
             if (prod && prod.variantes[item.varIndex]) {
-                prod.variantes[item.varIndex].stock += (tx.tipo === 'entrada' ? -item.cantidad : item.cantidad);
+                let cantReal = item.cantidad;
+                if (item.esTermopanel && item.unidad === 'paneles') cantReal = item.cantidad * parseFloat(item.medida);
+                
+                if (tx.tipo === 'entrada') {
+                    if (item.tipoStock === 'normal') { prod.variantes[item.varIndex].stock -= cantReal; if(item.esTermopanel && item.unidad === 'paneles') prod.variantes[item.varIndex].cantPaneles -= item.cantidad; }
+                    if (item.tipoStock === 'danado') prod.variantes[item.varIndex].danado -= cantReal;
+                    if (item.tipoStock === 'amarillo') prod.variantes[item.varIndex].amarillo -= cantReal;
+                } else {
+                    if (item.tipoStock === 'normal') { prod.variantes[item.varIndex].stock += cantReal; if(item.esTermopanel && item.unidad === 'paneles') prod.variantes[item.varIndex].cantPaneles += item.cantidad; }
+                    if (item.tipoStock === 'danado') prod.variantes[item.varIndex].danado += cantReal;
+                    if (item.tipoStock === 'amarillo') prod.variantes[item.varIndex].amarillo += cantReal;
+                }
                 await updateDoc(doc(db, "inventario", item.prodId), { variantes: prod.variantes });
             }
         }
