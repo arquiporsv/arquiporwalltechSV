@@ -5,30 +5,21 @@
 .stock-out { color: #dc3545; font-weight: bold; }
 .stock-in { color: #198754; font-weight: bold; }
 
-/* Grid estándar para: Medida, Precio, Stock, Botón */
+/* Grid estándar para: Medida, Precio, Stock, Dañado, Amarillo, Botón */
 .variante-row { 
     display: grid; 
     gap: 10px; 
     margin-bottom: 10px; 
-    grid-template-columns: 2fr 1fr 1fr 40px; 
+    grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr 40px; 
 }
 
-.btn-remove-row { background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; height: 38px; transition: 0.2s; }
-.btn-remove-row:hover { background: #c82333; }
-
-#tabla-lote-movimiento input, #tabla-pagos input {
-    width: 100%;
-    border: none;
-    background: transparent;
-}
-.modal-xl .modal-body {
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
+/* Grid especial para Termopanel: Medida, Precio, Cant. Paneles, Mts, Dañado, Amarillo, Botón */
 .variante-row.termopanel-row { 
     display: grid; 
     gap: 10px; 
     margin-bottom: 10px; 
-    grid-template-columns: 1.5fr 1fr 1fr 1fr 40px; 
+    grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1fr 40px; 
 }
+
+.btn-remove-row { background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; height: 38px; transition: 0.2s; }
+.btn-remove-row:hover { background: #c82333; }
