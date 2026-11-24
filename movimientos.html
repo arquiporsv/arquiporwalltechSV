@@ -10,7 +10,6 @@
 </head>
 <body>
     <div id="app-container">
-        <!-- SIDEBAR DINÁMICO -->
         <aside id="sidebar-container" class="sidebar"></aside>
 
         <main class="main-content">
@@ -21,7 +20,6 @@
                 </div>
             </header>
 
-            <!-- FILTROS -->
             <div class="card p-3 shadow-sm mb-3">
                 <div class="row align-items-end">
                     <div class="col-md-3 mb-2 mb-md-0">
@@ -76,7 +74,7 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="cancelarTransaccion()"></button>
                 </div>
                 <div class="modal-body">
-                    <!-- CABECERA CON FECHA EDITABLE -->
+                    <!-- CABECERA -->
                     <div class="row bg-light p-3 rounded mb-3 border border-warning">
                         <div class="col-md-3">
                             <label class="small fw-bold">Tipo:</label>
@@ -101,16 +99,16 @@
                         </div>
                     </div>
 
-                    <!-- SECCIÓN MULTI-DTE -->
+                    <!-- DTE -->
                     <h6 class="text-primary border-bottom pb-2">Documentos Tributarios (DTE)</h6>
                     <div class="row align-items-end mb-2 bg-light p-2 rounded">
                         <div class="col-md-5">
                             <label class="small">Código Generación:</label>
-                            <input type="text" id="temp-dte-codigo" class="form-control form-control-sm" placeholder="Ej. ABC-123">
+                            <input type="text" id="temp-dte-codigo" class="form-control form-control-sm">
                         </div>
                         <div class="col-md-5">
                             <label class="small">N° DTE:</label>
-                            <input type="text" id="temp-dte-numero" class="form-control form-control-sm" placeholder="Ej. 0001-0001...">
+                            <input type="text" id="temp-dte-numero" class="form-control form-control-sm">
                         </div>
                         <div class="col-md-2">
                             <button onclick="agregarDTEAlLote()" class="btn btn-sm btn-outline-primary w-100">+ DTE</button>
@@ -118,6 +116,7 @@
                     </div>
                     <ul class="list-group mb-3" id="lista-dtes-temp"></ul>
 
+                    <!-- AGREGAR PRODUCTOS -->
                     <h6 class="text-primary border-bottom pb-2 mt-4">Agregar Productos</h6>
                     <div class="row align-items-end mb-3">
                         <div class="col-md-3">
@@ -130,15 +129,32 @@
                             <select id="tx-variante" class="form-select form-select-sm"></select>
                         </div>
                         <div class="col-md-2">
-                            <label class="small">Cantidad:</label>
+                            <label class="small">Afectar Stock:</label>
+                            <select id="tx-tipo-stock" class="form-select form-select-sm">
+                                <option value="normal">Normal</option>
+                                <option value="danado">Dañado</option>
+                                <option value="amarillo">Amarillo</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2" id="col-tx-unidad" style="display:none;">
+                            <label class="small">Unidad:</label>
+                            <select id="tx-unidad" class="form-select form-select-sm">
+                                <option value="mts">Metros</option>
+                                <option value="paneles">Paneles</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="small">Cant:</label>
                             <input type="number" id="tx-cantidad" class="form-control form-control-sm" value="1" step="0.01" min="0.01">
                         </div>
-                        <div class="col-md-2" id="col-form-precio">
-                            <label class="small">Precio Unit. ($):</label>
+                        <div class="col-md-1" id="col-tx-precio">
+                            <label class="small">Precio $:</label>
                             <input type="number" id="tx-precio" class="form-control form-control-sm" step="0.01" min="0">
                         </div>
-                        <div class="col-md-2">
-                            <button onclick="agregarItemTransaccion()" class="btn btn-sm btn-outline-primary w-100">+ Agregar</button>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-12 text-end">
+                            <button onclick="agregarItemTransaccion()" class="btn btn-sm btn-outline-primary">+ Agregar Item</button>
                         </div>
                     </div>
 
@@ -147,8 +163,10 @@
                             <tr>
                                 <th>Producto</th>
                                 <th>Medida</th>
-                                <th>Cantidad</th>
-                                <th class="col-dinero">Precio Unit.</th>
+                                <th>Tipo Stock</th>
+                                <th>Unidad</th>
+                                <th>Cant.</th>
+                                <th class="col-dinero">Precio</th>
                                 <th class="col-dinero">Subtotal</th>
                                 <th>Acción</th>
                             </tr>
@@ -156,7 +174,7 @@
                         <tbody></tbody>
                     </table>
 
-                    <!-- SECCIÓN ENVÍO Y TOTALES -->
+                    <!-- ENVÍO Y TOTALES -->
                     <div class="row mt-4" id="section-envio-totales">
                         <div class="col-md-6">
                             <div class="form-check form-switch mb-2">
@@ -166,6 +184,10 @@
                             <div id="div-envio" style="display: none;">
                                 <label class="small">Monto del Envío ($):</label>
                                 <input type="number" id="tx-monto-envio" class="form-control form-control-sm" value="0" step="0.01" oninput="calcularTotalesTransaccion()">
+                            </div>
+                            <div class="mt-3">
+                                <label class="small fw-bold">Comentario:</label>
+                                <textarea id="tx-comentario" class="form-control form-control-sm" rows="2"></textarea>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -180,13 +202,7 @@
                         </div>
                     </div>
 
-                    <!-- COMENTARIO (SIEMPRE VISIBLE) -->
-                    <div class="mt-3">
-                        <label class="small fw-bold">Comentario / Nota:</label>
-                        <textarea id="tx-comentario" class="form-control form-control-sm" rows="2"></textarea>
-                    </div>
-
-                    <!-- SECCIÓN PAGOS -->
+                    <!-- PAGOS -->
                     <div id="section-pagos">
                         <h6 class="text-primary border-bottom pb-2 mt-4">Formas de Pago</h6>
                         <div class="row align-items-end mb-3 bg-light p-2 rounded">
@@ -227,7 +243,7 @@
                         </table>
                     </div>
 
-                    <!-- SECCIÓN ESTADO DE ENTREGA -->
+                    <!-- ESTADO ENTREGA -->
                     <div id="section-entrega">
                         <h6 class="text-primary border-bottom pb-2 mt-4">Estado de Entrega</h6>
                         <div class="row mb-3">
@@ -267,7 +283,6 @@
         </div>
     </div>
 
-    <!-- SCRIPTS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="js/layout.js"></script>
     <script type="module" src="js/movimientos.js"></script>
